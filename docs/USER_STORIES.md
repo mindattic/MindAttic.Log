@@ -105,6 +105,23 @@ updated: 2026-10-08
   specific reasoning. No test token: this story is a design judgment confirmed by absence of
   unnecessary code, not something an automated test asserts.
 
+## Epic G — High-stakes and no-DI-container consumers
+
+- **LOG-US-G1 ✅** As the reference app itself (Prose, a live production system with a 14-day
+  Serilog file pipeline and `LogIssue` triage already relied on), the shared pipeline can be
+  adopted additively — a second `builder.Logging.AddSerilog(...)` provider alongside the existing
+  ones, writing `MindAttic_Log` into the same database, with nothing existing touched, rerouted,
+  or removed. *(verified by Prose repo's `MindAtticLogSqlServerTests` —
+  `AddMindAtticLog_SqlServer_Writes_A_Readable_Row_Through_ILogger` — against a throwaway LocalDB
+  database; full suite 3007/3026 unchanged before/after; the live running Hub process was
+  deliberately not restarted to pick it up.)*
+- **LOG-US-G2 🟡** As a consumer with no DI container at all (MindAttic.Launcher — Spectre.Console.Cli
+  constructs commands directly, no `IServiceCollection`), the pipeline can still be wired by
+  calling `WriteToMindAtticLog` directly on a `LoggerConfiguration` at the entry point, with a
+  top-level try/catch giving the app its first crash visibility ever. Verified live: ran the built
+  exe, confirmed the rolled file and its table are created cleanly — no automated test, no token
+  to cite, honestly partial (same live-verification class as LOG-US-F1).
+
 ## Epic E — MindAttic.Log.Reader
 
 - **LOG-US-E1 🟡** As an operator, I can open a folder of rolled `MindAttic.Log.*.db` files, filter
