@@ -52,8 +52,8 @@ updated: 2026-10-08
 | MindAttic.Media | .NET (library, + Azure variant) | none | — | Pure class library with no DI composition root of its own (`AddMedia<T>()` is called *by* a consuming app's container, e.g. Ideas'). Any future logging flows through automatically once the consuming app has its own pipeline wired — no separate integration point. | n/a |
 | MindAttic.Psst | .NET CLI | none | — | Short-lived passthrough wrapper (`psst -- <command>`); entire purpose is piping output to the terminal. No DI container, no `ILogger` anywhere, explicitly "no daemon, nothing listening." Opening a SQLite connection per few-second invocation for 1-2 status lines would cost more than it's worth against the tool's own minimal-footprint design. | n/a |
 | MindAttic.Web | Static HTML sites + Node | none | — | No .NET project anywhere in the repo (mindattic.com, mindatticcares.com, ryandebraal.com are static sites; the rest is a JS test package). No integration point for a .NET package. | n/a — non-.NET |
-| MindAttic.Vault | .NET | none (settings store) | Sqlite (rolled file) | `ILogger<T>` in `AlertDispatcher`, `MonitorBackgroundService`; no durable sink. Not yet picked up — lower priority than apps with real logging volume, since Vault's own operations are infrequent. | ⬜ |
-| MindAttic.Legion | .NET | none | Sqlite (rolled file) | `Microsoft.Extensions.Logging` referenced in DI extensions; no durable sink. Not yet picked up. | ⬜ |
+| **MindAttic.Vault.Dashboard** | .NET (ASP.NET Core Blazor Server) | none | Sqlite (rolled file) | The LLM health-monitor web app (`HealthMonitorStore`/`SelfHealer`/`AlertDispatcher`/`MonitorBackgroundService`) already called `ILogger<T>` throughout but had no durable sink. Wired `AddMindAtticLog` (rolled-file tier, `%LocalAppData%\MindAttic\VaultDashboard\logs`) into `Program.cs`. No test project exists for the Dashboard (only the `MindAttic.Vault` library has one) — verified **live**: ran the built app, confirmed 61 real rows landed, including `MonitorBackgroundService`'s own startup line. Library's own suite (293/293) unaffected. Note: `MindAttic.Vault` the *library* has no DI host of its own and needs no separate action — only the Dashboard app does. | ✅ |
+| MindAttic.Legion | .NET (library + `.Cli`) | none | — | The library (`LegionClient`, `LlmVotingService`, etc.) has no DI composition root of its own — `ILogger<T>` it requests resolves from whichever consuming app's container (Automata/Tutor/Ideas/Vault.Dashboard, all already migrated), so it needs no separate integration. `MindAttic.Legion.Cli` is a one-shot command dispatcher (`ask`/`vote`/`poll`/etc.) whose `Console.WriteLine` output IS its interactive result (built to pipe back into another CLI) — same shape as Deploy/Psst, correctly not a sink candidate. | n/a |
 | ChiMesh | PowerShell (LoRa/Meshtastic node provisioning) | none | — | Pure PowerShell hardware-provisioning CLI, no .NET at all. | n/a — non-.NET |
 | GridGame2026 | Unity/C# | n/a | — | Unity's own logging; not a service app — out of scope for this pipeline. | skip |
 
@@ -73,12 +73,14 @@ with its specific reasoning rather than silently skipped.
 
 ## What's left
 
-1. **MindAttic.Launcher** — blocked on your uncommitted changes landing first.
+Every MindAttic repo has now been individually audited. Two remain, both deliberately held
+rather than forgotten:
+
+1. **MindAttic.Launcher** — blocked on your uncommitted changes landing first (`HostAgentCommand.cs`,
+   `AgentProviderRegistry.cs`, `ClaudeStatusService.cs`).
 2. **Prose** (and every `Prose.*` front door that depends on vendored `Prose.Core`, including
-   KdpPublish) — held for explicit go-ahead given it's a live production pipeline, not migrated
-   unilaterally.
-3. **MindAttic.Vault** / **MindAttic.Legion** — have `ILogger<T>` call sites but no durable sink
-   yet; lower priority (infrequent operations) than the apps already done, not yet picked up.
+   KdpPublish) — held for explicit go-ahead given it's a live production pipeline (14-day
+   retention, live ring buffer, `LogIssue` triage already relied on), not migrated unilaterally.
 
 ## Non-.NET apps
 

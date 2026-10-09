@@ -80,13 +80,14 @@ updated: 2026-10-08
 
 ## Epic F — Ecosystem-wide pass
 
-- **LOG-US-F1 🟡** As a consumer with no test project of its own (Mobile, Formicarium), the pipeline
-  can still be verified without inventing test infrastructure uninvited: run the real built app
-  against a real (or dev LocalDB) database and confirm actual rows land. Mobile: ran the built exe,
-  confirmed log lines reached the rolled `.db` file. Formicarium: ran the Dashboard against its dev
-  LocalDB, confirmed 20 real rows in `dbo.MindAttic_Log`. Verified live, not by a named automated
-  test — no test token to cite, honestly partial by this file's own convention (see
-  docs/MIGRATION.md for the full account).
+- **LOG-US-F1 🟡** As a consumer with no test project of its own (Mobile, Formicarium,
+  MindAttic.Vault.Dashboard), the pipeline can still be verified without inventing test
+  infrastructure uninvited: run the real built app and confirm actual rows land. Mobile: ran the
+  built exe, confirmed log lines reached the rolled `.db` file. Formicarium: ran the Dashboard
+  against its dev LocalDB, confirmed 20 real rows in `dbo.MindAttic_Log`. Vault.Dashboard: ran the
+  built app for 8 seconds, confirmed 61 real rows in the rolled file, including the background
+  monitor's own startup line. Verified live, not by a named automated test — no test token to
+  cite, honestly partial by this file's own convention (see docs/MIGRATION.md for the full account).
 - **LOG-US-F2 ✅** As a consumer with zero prior crash visibility (MediaButler's WPF front door had
   no `DispatcherUnhandledException`/`AppDomain.UnhandledException` handlers at all before this),
   the rolled-file tier can back a purpose-built crash log wired into newly-added handlers, not just
