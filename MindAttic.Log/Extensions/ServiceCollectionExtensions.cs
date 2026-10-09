@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Serilog;
 
 namespace MindAttic.Log.Extensions;
@@ -26,7 +27,12 @@ public static class ServiceCollectionExtensions
             .WriteToMindAtticLog(options)
             .CreateLogger();
 
-        services.AddSerilog(logger, dispose: true);
+        // AddLogging(...) is required, not just AddSerilog(...): it's what registers the open
+        // generic ILogger<T>/ILoggerFactory services every call site resolves. AddSerilog alone
+        // (on IServiceCollection, outside of an ILoggingBuilder) registers the Serilog bridge but
+        // leaves ILogger<T> unresolvable — caught by Automata's integration test, see
+        // docs/MIGRATION.md.
+        services.AddLogging(builder => builder.AddSerilog(logger, dispose: true));
         return services;
     }
 

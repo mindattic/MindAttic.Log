@@ -10,7 +10,10 @@ updated: 2026-10-08
 # MindAttic.Log — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test that proves it.
 > "Consumer" = a MindAttic app taking a dependency on the `MindAttic.Log` package.
-> Verified 2026-10-08: `dotnet test MindAttic.Log.slnx` → Failed: 0, Passed: 8, Total: 8 (exit 0).
+> Verified 2026-10-08: `dotnet test MindAttic.Log.slnx` → Failed: 0, Passed: 9, Total: 9 (exit 0).
+> Also verified end to end against a real consumer: `dotnet test Automata.Tests.csproj` → 571/571
+> passing, including `MindAtticLogIntegrationTests` (Automata repo) which writes a log row through
+> `AddMindAtticLog` and reads it back out of the same `automata.db` file EF owns.
 
 ## Epic A — The shared schema
 
@@ -41,10 +44,20 @@ updated: 2026-10-08
 
 ## Epic C — DI integration
 
-- **LOG-US-C1 🟡** As a consumer, `services.AddMindAtticLog(o => ...)` wires a Serilog pipeline
-  under `ILogger<T>` with no call-site changes. Builds against both the SQL Server and SQLite
-  destinations (`MindAttic.Log` compiles clean on net9.0 and net10.0 — see `dotnet build`), but has
-  no integration test yet exercising it end to end through `IServiceProvider`.
+- **LOG-US-C1 ✅** As a consumer, `services.AddMindAtticLog(o => ...)` wires a Serilog pipeline
+  under `ILogger<T>` with no call-site changes, and `ILogger<T>` actually resolves from the
+  container. *(verified by `AddMindAtticLog_Makes_ILogger_Of_T_Resolvable`.)* An earlier version
+  called `services.AddSerilog(...)` directly, which registers the Serilog bridge but not the open
+  generic `ILogger<T>`/`ILoggerFactory` services — caught by Automata's own integration test before
+  this story was marked done; fixed by routing through `services.AddLogging(builder => ...)`
+  instead. See LOG-US-C2.
+- **LOG-US-C2 ✅** As the first real consumer (Automata — see docs/MIGRATION.md), wiring
+  `AddMindAtticLog` into `AddAutomataCore` with `Destination = LogDestination.Sqlite` pointed at
+  Automata's own `automata.db` produces a working `MindAttic_Log` table inside that same file,
+  coexisting with EF's own tables, reachable through the `ILogger<T>` calls `CollectionStore` /
+  `WorkflowEngine` / etc. already make. *(verified by Automata repo's
+  `MindAtticLogIntegrationTests.AddMindAtticLog_Writes_Into_The_Same_File_As_Automata_Own_Tables`;
+  full Automata suite — 571/571 — still green after the change.)*
 
 ## Epic D — The SQL Server tier
 

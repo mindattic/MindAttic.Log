@@ -31,7 +31,7 @@ updated: 2026-10-08
 | MindAttic.Authentication | .NET | Host-provided (SQL Server typical) | SqlServer | `ILogger<T>` + custom `AuthAuditWriter` → `AuthAuditLog` table (security-audit specific, not general app logging — likely stays separate from `MindAttic_Log`). | ⬜ |
 | MindAttic.Ideas | .NET Blazor | SQL Server (`CmsDbContext`) | SqlServer | `ILogger` present, no durable sink found. | ⬜ |
 | Tutor | .NET Blazor | SQL Server (`TutorAuthDbContext`) | SqlServer | `ILogger` in `Tutor.Mcp`; no durable sink found. | ⬜ |
-| Automata | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | `ILogger` across `WorkflowEngine`/`FlowAuthoringService`/`ReplayEngine`; no durable sink found. Closest sibling in shape — good second integration target after Launcher. | ⬜ |
+| Automata | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | Migrated: `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites (`WorkflowEngine`/`FlowAuthoringService`/`ReplayEngine`/etc.) are unchanged; only the sink underneath is new. | ✅ |
 | MindAttic.Launcher | .NET (net10.0-windows) | none | Sqlite (rolled file) | Raw `Console.Write*`/`AnsiConsole.MarkupLine` across 17 files (Commands/, Menus/, Services/, Ui/) — **no structured logging at all**. First integration target: no existing pipeline to reconcile with. | ⬜ |
 | KdpPublish | .NET (WPF) | none | Sqlite (rolled file) | Hand-rolled file logger in `App.xaml.cs` (`File.AppendAllText`-style). Best second no-DB candidate — already proves the WPF+WebView2 shell shape this repo's Reader reuses. | ⬜ |
 | MindAttic.Vault | .NET | none (settings store) | Sqlite (rolled file) | `ILogger<T>` in `AlertDispatcher`, `MonitorBackgroundService`; no durable sink. | ⬜ |
@@ -64,9 +64,17 @@ instead of asking every app to change its logging calls.
 
 ## Suggested migration order
 
-1. **MindAttic.Launcher** — no existing pipeline to reconcile with; proves the no-DB/rolled-SQLite
-   tier end to end in the project this repo was built alongside.
-2. **Automata** — proves the app-owned-SQLite tier (point the sink at `AutomataDb`'s file).
+1. **Automata ✅ (2026-10-08)** — done first instead of Launcher: Launcher had uncommitted changes
+   in exactly the files that would need touching, so Automata went first to prove the app-owned-
+   SQLite tier without stepping on in-progress work. `MindAtticSqliteSink`'s `services.AddSerilog(...)`
+   call turned out not to register `ILogger<T>` — caught by this migration's own integration test,
+   fixed in `MindAttic.Log` (now `services.AddLogging(builder => builder.AddSerilog(...))`), see
+   `docs/USER_STORIES.md` LOG-US-C1/C2. Both `MindAttic.Log.Tests` (9/9) and the full Automata suite
+   (571/571) pass with the fix.
+2. **MindAttic.Launcher** — once current uncommitted work there lands, proves the no-DB/rolled-
+   SQLite tier in the project this repo was built alongside. Needs care distinguishing real
+   diagnostic logging from intentional `AnsiConsole` TUI rendering (see survey notes above) —
+   not every `Console.Write*` call in a TUI app is a log line to extract.
 3. **KdpPublish** — second no-DB app; replaces a hand-rolled file logger, and already shares the
    Reader's WPF+WebView2 shell shape.
 4. **Prose** — the reference model itself; migrating it last (not first) because it already has a
