@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MindAttic.Log/MindAttic.Log.csproj" />
+  <Project Path="MindAttic.Log.Tests/MindAttic.Log.Tests.csproj" />
+  <Project Path="MindAttic.Log.Reader/MindAttic.Log.Reader.csproj" />
+</Solution>

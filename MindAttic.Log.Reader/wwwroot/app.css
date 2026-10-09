@@ -1,0 +1,100 @@
+:root {
+  color-scheme: dark;
+  --bg: #1e1e1e;
+  --bg-2: #252526;
+  --border: #3c3c3c;
+  --text: #d4d4d4;
+  --text-dim: #8a8a8a;
+  --accent: #4ec9b0;
+  --warn: #dcdcaa;
+  --error: #f14c4c;
+  --fatal: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Segoe UI, system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#toolbar, #filters {
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #2d2d2d;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover { background: #383838; }
+
+input, select {
+  background: #2d2d2d;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+label { display: flex; align-items: center; gap: 4px; color: var(--text-dim); }
+
+.source-label { color: var(--text-dim); margin-left: auto; }
+#sqlServerInput { width: 280px; }
+
+main { flex: 1; overflow: auto; }
+
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  position: sticky; top: 0;
+  background: var(--bg-2);
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+tbody td {
+  padding: 4px 10px;
+  border-bottom: 1px solid #2a2a2a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 1px;
+}
+tbody tr:hover { background: #2a2a2a; cursor: pointer; }
+
+.col-time { width: 180px; }
+.col-level { width: 90px; }
+.col-app { width: 180px; }
+.col-category { width: 220px; }
+.col-message { white-space: normal; }
+
+.level-Verbose, .level-Debug { color: var(--text-dim); }
+.level-Warning { color: var(--warn); }
+.level-Error { color: var(--error); }
+.level-Fatal { color: var(--fatal); font-weight: 600; }
+
+#statusLabel { color: var(--text-dim); }
+
+#detailPane {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 480px;
+  background: var(--bg-2); border-left: 1px solid var(--border);
+  padding: 12px; overflow: auto;
+}
+#detailPane.hidden { display: none; }
+#detailContent { white-space: pre-wrap; word-break: break-word; }
+#btnCloseDetail { position: absolute; top: 8px; right: 8px; }

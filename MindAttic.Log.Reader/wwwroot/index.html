@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MindAttic.Log Reader</title>
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<header id="toolbar">
+  <div class="source-group">
+    <button id="btnBrowseFolder" title="Choose a folder of rolled MindAttic.Log.*.db files">Open folder…</button>
+    <button id="btnBrowseFile" title="Choose a single app-owned SQLite database">Open .db file…</button>
+    <input id="sqlServerInput" type="text" placeholder="SQL Server connection string…" />
+    <button id="btnConnectSqlServer">Connect</button>
+    <span id="sourceLabel" class="source-label">No source selected</span>
+  </div>
+</header>
+
+<section id="filters">
+  <label>Since <input id="fSince" type="datetime-local" /></label>
+  <label>Until <input id="fUntil" type="datetime-local" /></label>
+  <label>Min level
+    <select id="fLevel">
+      <option value="">(any)</option>
+      <option value="0">Verbose</option>
+      <option value="1">Debug</option>
+      <option value="2">Information</option>
+      <option value="3">Warning</option>
+      <option value="4">Error</option>
+      <option value="5">Fatal</option>
+    </select>
+  </label>
+  <label>Application <input id="fApplication" type="text" placeholder="e.g. MindAttic.Launcher" /></label>
+  <label>Category <input id="fCategory" type="text" placeholder="contains…" /></label>
+  <label>Message <input id="fSearch" type="text" placeholder="contains…" /></label>
+  <label>Max <input id="fMax" type="number" value="500" min="1" max="5000" /></label>
+  <button id="btnQuery">Query</button>
+  <span id="statusLabel"></span>
+</section>
+
+<main>
+  <table id="grid">
+    <thead>
+      <tr>
+        <th class="col-time">Timestamp (UTC)</th>
+        <th class="col-level">Level</th>
+        <th class="col-app">Application</th>
+        <th class="col-category">Category</th>
+        <th class="col-message">Message</th>
+      </tr>
+    </thead>
+    <tbody id="gridBody"></tbody>
+  </table>
+</main>
+
+<div id="detailPane" class="hidden">
+  <button id="btnCloseDetail">×</button>
+  <pre id="detailContent"></pre>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

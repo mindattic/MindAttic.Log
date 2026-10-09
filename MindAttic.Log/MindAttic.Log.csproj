@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>MindAttic.Log</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MindAttic.Log</AssemblyName>
+    <!-- Whole-number versioning: major-only bumps (1.0.0 → 2.0.0 → 3.0.0). Minor/patch stay 0. -->
+    <Version>1.0.0</Version>
+    <PackageId>MindAttic.Log</PackageId>
+    <Title>MindAttic.Log</Title>
+    <Authors>MindAttic</Authors>
+    <Company>MindAttic</Company>
+    <Description>Shared structured-logging pipeline for MindAttic apps: one strict LogEntry schema, written to a MindAttic.Log table on SQL Server or SQLite, or a MindAttic.Log file when there is no database.</Description>
+    <PackageTags>mindattic;logging;serilog;sql-server;sqlite;structured-logging</PackageTags>
+    <PackageProjectUrl>https://github.com/mindattic/MindAttic.Log</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mindattic/MindAttic.Log.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Copyright>Copyright (c) 2026 MindAttic</Copyright>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.MSSqlServer" Version="8.1.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.20" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MindAttic.Log.Tests" />
+  </ItemGroup>
+
+</Project>
