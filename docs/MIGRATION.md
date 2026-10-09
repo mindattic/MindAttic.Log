@@ -33,7 +33,7 @@ updated: 2026-10-08
 | Tutor | .NET Blazor | SQL Server (`TutorAuthDbContext`) | SqlServer | `ILogger` in `Tutor.Mcp`; no durable sink found. | ⬜ |
 | Automata | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | Migrated: `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites (`WorkflowEngine`/`FlowAuthoringService`/`ReplayEngine`/etc.) are unchanged; only the sink underneath is new. | ✅ |
 | MindAttic.Launcher | .NET (net10.0-windows) | none | Sqlite (rolled file) | Raw `Console.Write*`/`AnsiConsole.MarkupLine` across 17 files (Commands/, Menus/, Services/, Ui/) — **no structured logging at all**. First integration target: no existing pipeline to reconcile with. | ⬜ |
-| KdpPublish | .NET (WPF) | none | Sqlite (rolled file) | Hand-rolled file logger in `App.xaml.cs` (`File.AppendAllText`-style). Best second no-DB candidate — already proves the WPF+WebView2 shell shape this repo's Reader reuses. | ⬜ |
+| KdpPublish | .NET (WPF) | none | — | Re-checked 2026-10-08: KdpPublish has no logging surface of its own. Its only own-code "logging" is a `#if DEBUG`-only `File.AppendAllText` crash dump in `App.xaml.cs` — deliberately dependency-free so it still works if a catastrophic crash breaks everything else (same reasoning Automata.App uses, see its own App.xaml.cs comment), not a candidate for routing through a DI-based sink. All of KdpPublish's real logging flows through vendored `Prose.Core` (`AddProseServices()`); migrating it is the same work as migrating Prose, not a separate no-DB target. | n/a — folded into Prose |
 | MindAttic.Vault | .NET | none (settings store) | Sqlite (rolled file) | `ILogger<T>` in `AlertDispatcher`, `MonitorBackgroundService`; no durable sink. | ⬜ |
 | MindAttic.Legion | .NET | none | Sqlite (rolled file) | `Microsoft.Extensions.Logging` referenced in DI extensions; no durable sink. | ⬜ |
 | MindAttic.Deploy | .NET CLI + Node | none | Sqlite (rolled file) | No logging detected via grep — likely console-only. | ⬜ |
@@ -75,12 +75,14 @@ instead of asking every app to change its logging calls.
    SQLite tier in the project this repo was built alongside. Needs care distinguishing real
    diagnostic logging from intentional `AnsiConsole` TUI rendering (see survey notes above) —
    not every `Console.Write*` call in a TUI app is a log line to extract.
-3. **KdpPublish** — second no-DB app; replaces a hand-rolled file logger, and already shares the
-   Reader's WPF+WebView2 shell shape.
-4. **Prose** — the reference model itself; migrating it last (not first) because it already has a
-   working pipeline under real use (14-day retention, live ring buffer, `LogIssue` triage) that
-   nothing should regress casually.
-5. A SQL Server app (Ideas or Tutor) — proves the SQL Server tier against a real production schema.
+3. **Prose (and KdpPublish/every other Prose.\* front door along with it)** — re-checked
+   2026-10-08: KdpPublish has no logging of its own; everything routes through vendored
+   `Prose.Core`. Migrating Prose.Core's pipeline migrates every front door that depends on it
+   (Prose.Hub, KdpPublish, and any other `Prose.*` app) in one pass — there is no separate
+   "KdpPublish-only" step. Last on purpose: Prose.Core already has a working pipeline under real
+   use (14-day retention, live ring buffer, `LogIssue` triage) that nothing should regress
+   casually, and re-vendoring a shared package touches every consumer at once.
+4. A SQL Server app (Ideas or Tutor) — proves the SQL Server tier against a real production schema.
 
 ## Non-.NET apps
 
