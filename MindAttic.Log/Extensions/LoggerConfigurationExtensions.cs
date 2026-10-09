@@ -61,7 +61,11 @@ public static class LoggerConfigurationExtensions
         columnOptions.Store.Add(StandardColumn.Exception);
         columnOptions.TimeStamp.ColumnName = "TimestampUtc";
         columnOptions.TimeStamp.ConvertToUtc = true;
-        columnOptions.Level.StoreAsEnum = false;
+        // true, not the sink's own default (false): false stores Level as its string name
+        // ("Warning"), which doesn't fit LogSchema's TINYINT column. true stores
+        // LogEventLevel's own numeric value, which is deliberately numbered identically to
+        // Models.LogSeverity (Verbose=0 … Fatal=5), so both backends store the same integer.
+        columnOptions.Level.StoreAsEnum = true;
 
         // Application/Category/MessageTemplate/CorrelationId/MachineName all ride as ordinary
         // Serilog properties (pushed by ServiceCollectionExtensions' enrichers, or by the caller

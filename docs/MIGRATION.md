@@ -28,6 +28,7 @@ updated: 2026-10-08
 | Project | Stack | DB backend | Tier | Current logging (as surveyed) | Status |
 |---|---|---|---|---|---|
 | Prose | .NET | SQL Server | SqlServer | Serilog daily text files (`Prose.Hub/Program.cs`) parsed back by `LoggingService`; separate derived `LogIssue` triage table. Reference model for the schema — see BIBLE §4.1. | 🟡 |
+| MindAttic.Ideas | .NET Blazor | SQL Server (`CmsDbContext` — genuine general-purpose content DB: Sites, Pages, Media, Settings, Workflows, plus MindAttic.Authentication's identity tables mixed in) | SqlServer | Migrated: `AddIdeasCore` calls `AddMindAtticLog` with `Destination = SqlServer` pointed at the same connection string `CmsDbContext` uses; `MindAttic_Log` table created once at startup (dev-only, next to the existing EF migration) via `LogSchema.CreateTableSqlServer`. First live proof of the SQL Server tier — caught and fixed a real bug (see docs/USER_STORIES.md LOG-US-D1): `Level.StoreAsEnum` defaulted to storing level as text, which didn't fit the `TINYINT` column. Ideas had almost no prior `ILogger<T>` usage to extract (one call site in `DemoAccess.cs`) — this mainly establishes the pipeline for logging going forward rather than migrating a large existing surface. Full suite: 586/586 passing (1 new `[Explicit]` live-SQL-Server test, run manually and verified). | ✅ |
 | MindAttic.Authentication | .NET | Host-provided (SQL Server typical) | SqlServer | `ILogger<T>` + custom `AuthAuditWriter` → `AuthAuditLog` table (security-audit specific, not general app logging — likely stays separate from `MindAttic_Log`). | ⬜ |
 | MindAttic.Ideas | .NET Blazor | SQL Server (`CmsDbContext`) | SqlServer | `ILogger` present, no durable sink found. | ⬜ |
 | Tutor | .NET Blazor | SQL Server, but auth-only (`TutorAuthDbContext` is MindAttic.Authentication's identity schema; "course content and per-user progress stay JSON" per its own doc comment) | Sqlite (rolled file) | Migrated: re-checked 2026-10-08 and found Tutor has its own hand-rolled logging — a static `Log`/`LogStore` facade (`Log.Info`/`Warn`/`Error`/`Critical`, used throughout the app) persisted by `LogStorageService` as a single `app-logs.json` **rewritten whole on every save** — exactly the monolithic-file anti-pattern this repo's design rejected (see BIBLE §4.2). Added `MindAtticLogBridge`, which subscribes to `LogStore.EntryAdded` and forwards every entry into the rolled-SQLite tier — zero call-site changes, existing JSON persistence and live in-app viewer left untouched. TutorAuth's SQL Server DB was deliberately not used: it's a narrowly-scoped identity schema (same reasoning as MindAttic.Authentication's own `AuthAuditLog`), not a general-purpose app database. | ✅ |
@@ -93,10 +94,10 @@ instead of asking every app to change its logging calls.
    "KdpPublish-only" step. Last on purpose: Prose.Core already has a working pipeline under real
    use (14-day retention, live ring buffer, `LogIssue` triage) that nothing should regress
    casually, and re-vendoring a shared package touches every consumer at once.
-5. **Ideas** — the one remaining confirmed candidate for an actual general-purpose SQL Server
-   tier (`CmsDbContext`, not an auth-only database like Tutor's) — not yet re-checked the way
-   Tutor and KdpPublish were, so its logging call-site pattern (ILogger<T> vs. something custom)
-   needs confirming before assuming either way.
+5. **Ideas ✅ (2026-10-08)** — confirmed `CmsDbContext` is a genuine general-purpose SQL Server
+   database (not auth-only like Tutor's), and `ILogger<T>` (not a custom facade) is its call-site
+   pattern, though barely used yet. This was the first live, non-SQLite proof of the SQL Server
+   tier end to end.
 
 ## Non-.NET apps
 

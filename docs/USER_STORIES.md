@@ -67,10 +67,16 @@ updated: 2026-10-08
 
 ## Epic D — The SQL Server tier
 
-- **LOG-US-D1 🟡** As a consumer with SQL Server, `WriteToMindAtticLog(LogDestination.SqlServer)`
+- **LOG-US-D1 ✅** As a consumer with SQL Server, `WriteToMindAtticLog(LogDestination.SqlServer)`
   configures `Serilog.Sinks.MSSqlServer` with `AutoCreateSqlTable = false` and additional columns
-  mapped onto `LogSchema`'s names. Compiles clean; not yet exercised against a real SQL Server
-  instance (no CI database available at the time this was written).
+  mapped onto `LogSchema`'s names, and a row written through `ILogger<T>` actually lands and reads
+  back correctly. *(verified by Ideas repo's `MindAtticLogSqlServerTests` —
+  `AddMindAtticLog_SqlServer_Writes_A_Readable_Row_Through_ILogger` — against a throwaway SQL
+  Server LocalDB database the test provisions and drops itself; `[Explicit]`, same convention as
+  that repo's other live-SQL-Server tests.)* This run caught a real bug:
+  `Level.StoreAsEnum` defaulted to `false` (stores the level as text, e.g. "Warning"), which doesn't
+  fit `LogSchema`'s `TINYINT` column — fixed to `true` (Serilog's `LogEventLevel` is numbered
+  identically to `Models.LogSeverity`, so both backends now store the same integer).
 
 ## Epic E — MindAttic.Log.Reader
 
