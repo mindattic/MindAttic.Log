@@ -125,7 +125,13 @@ public partial class MainWindow : Window
             var other => throw new InvalidOperationException($"Unknown source kind '{other}'."),
         };
         var source = new LogSource { Kind = kind, Path = sourceNode["path"]!.GetValue<string>() };
-        var filter = msg["filter"].Deserialize<LogFilter>(JsonOptions) ?? new LogFilter();
+        // BUG FIX: JsonNode.Deserialize<T>() throws on a null receiver rather than returning null,
+        // so the "?? new LogFilter()" fallback below never actually ran for a missing "filter" key
+        // — it looked defensive but wasn't. Caught by the outer try/catch either way (surfaced as
+        // onError), so not a crash, just a filter-less query silently failing instead of defaulting.
+        var filter = msg["filter"] is { } filterNode
+            ? filterNode.Deserialize<LogFilter>(JsonOptions) ?? new LogFilter()
+            : new LogFilter();
 
         var results = await queryService.QueryAsync(source, filter);
         await PostAsync("onResults", results);

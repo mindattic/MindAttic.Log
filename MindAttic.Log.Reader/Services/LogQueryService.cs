@@ -142,7 +142,7 @@ public sealed class LogQueryService
     private static LogEntry ReadEntry(System.Data.Common.DbDataReader reader) => new()
     {
         Id = reader.GetInt64(0),
-        TimestampUtc = DateTime.Parse(reader.GetValue(1).ToString()!, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal),
+        TimestampUtc = ParseTimestamp(reader.GetValue(1)),
         Level = (LogSeverity)Convert.ToInt32(reader.GetValue(2)),
         Application = reader.GetString(3),
         Category = reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -152,5 +152,22 @@ public sealed class LogQueryService
         PropertiesJson = reader.IsDBNull(8) ? null : reader.GetString(8),
         CorrelationId = reader.IsDBNull(9) ? null : reader.GetString(9),
         MachineName = reader.IsDBNull(10) ? null : reader.GetString(10),
+    };
+
+    /// <summary>
+    /// BUG FIX: SQL Server's DATETIME2 column comes back from ADO.NET as a native DateTime, not a
+    /// string. The old code called .ToString() on it unconditionally and re-parsed the result —
+    /// .ToString() with no format/culture argument uses CultureInfo.CurrentCulture, so on any
+    /// non-US-English locale (e.g. d/M/yyyy) that round trip could silently swap day and month.
+    /// SQLite's TEXT column is already the ISO-8601 string the sink wrote, so only that path needs
+    /// to parse text at all.
+    /// </summary>
+    private static DateTime ParseTimestamp(object value) => value switch
+    {
+        DateTime dt => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+        string s => DateTime.Parse(s, null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal),
+        _ => DateTime.Parse(value.ToString()!, null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal),
     };
 }

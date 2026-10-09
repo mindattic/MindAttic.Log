@@ -114,10 +114,13 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
                 }
                 transaction.Commit();
             }
-            catch (SqliteException)
+            catch (Exception)
             {
-                // A log write must never take the host app down. Dropping a batch on a sink
-                // failure is the right tradeoff — see docs/BIBLE.md §4.
+                // A log write must never take the host app down (LOG-LAW-3) — this runs on a bare
+                // System.Threading.Timer callback with no other safety net, so an uncaught
+                // exception here (not just SqliteException: a full disk can surface as IOException,
+                // a locked file as UnauthorizedAccessException) would otherwise crash the whole
+                // host process. Dropping a batch on any sink failure is the right tradeoff.
             }
         }
     }
