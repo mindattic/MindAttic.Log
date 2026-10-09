@@ -52,6 +52,36 @@ at all — plus a WPF + WebView2 Reader app to browse all three.
 - **NOT a credential resolver.** SQL Server connection strings are credentials; this library takes
   one as a plain string (`MindAtticLogOptions.SqlServerConnectionString`) and never resolves it
   itself — the host app resolves it through MindAttic.Vault per HOUSE-LAW-3 before calling in.
+- **NOT a mandate to erase every other table or file that happens to hold records shaped like
+  logs.** "One pipeline" means one pipeline for *general operational/diagnostic logging* — the
+  thing `ILogger<T>`/`Log.Information(...)` calls produce. It does not mean folding a
+  narrowly-scoped domain or compliance record into `MindAttic_Log` just because both are rows with
+  a timestamp, and it does not mean a MindAttic.Log migration gets to restart a live production
+  process on its own authority. Three concrete lines, each reached independently during the
+  2026-10-08 ecosystem-wide migration pass (docs/MIGRATION.md) and confirmed here so a future pass
+  doesn't re-litigate them as if they were oversights:
+  - **Domain/compliance audit tables stay separate.** MindAttic.Authentication's `AuthAuditLog`
+    (event type, outcome, hashed IP, user agent) and MediaButler's NDJSON file-mutation `AuditLog`
+    (op/kind/from/to) are purpose-built records with their own schema and their own audience — a
+    security reviewer, a file-recovery tool — not an operator reading application logs. Folding
+    either into `MindAttic_Log`'s generic schema would be a schema regression for its real
+    consumer, not a consolidation win. Two independent migrations reached this same conclusion.
+  - **A live production process is never restarted by a logging migration.** Prose's additive
+    `MindAttic_Log` sink (docs/MIGRATION.md) is committed and pushed, but the already-running Hub
+    process was deliberately left untouched — it adopts the new sink on its next ordinary
+    redeploy, like any other code change, not because a migration decided to bounce it.
+  - **Interactive UI output is not a log, even when it goes to a console.** MindAttic.Launcher's
+    `AnsiConsole.MarkupLine` calls across its 17 TUI files, and MindAttic.Deploy's equivalent, are
+    the menu/progress text a human is reading in real time — the product, not a diagnostic trail
+    of it. Logging infrastructure gets the crash/error path (which Launcher now has); it does not
+    get to re-route an app's own UI through a database as a side effect of "one pipeline."
+  - **A pre-existing store that backs a live, user-facing feature is not removed just because a
+    sink now runs alongside it.** Tutor's `LogStorageService` still writes `app-logs.json`
+    alongside `MindAtticLogBridge` (not instead of it) specifically because that file is what lets
+    Tutor's in-app log viewer show history across an app restart *today*; deleting it would be a
+    visible product behavior change (the viewer starts empty after every restart until new entries
+    accumulate), not a logging-infrastructure decision, and nothing in this migration had the
+    authority or the product context to make that call unilaterally.
 
 ## 4. Architecture canon {#LOG-§4}
 
