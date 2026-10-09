@@ -58,6 +58,12 @@ updated: 2026-10-08
   `WorkflowEngine` / etc. already make. *(verified by Automata repo's
   `MindAtticLogIntegrationTests.AddMindAtticLog_Writes_Into_The_Same_File_As_Automata_Own_Tables`;
   full Automata suite — 571/571 — still green after the change.)*
+- **LOG-US-C3 ✅** As a consumer with a non-`ILogger<T>` logging call-site pattern (Tutor's own
+  static `Log`/`LogStore` facade), the sink can still be driven directly — not every app needs to
+  go through `AddMindAtticLog`/DI at all. *(verified by Tutor repo's `MindAtticLogBridgeTests`:
+  `Log_Error_Reaches_The_Shared_MindAttic_Log_Table` and
+  `Existing_LogStore_Still_Receives_Entries_Alongside_The_Bridge`; full Tutor suite — 456/456 —
+  still green after the change.)*
 
 ## Epic D — The SQL Server tier
 

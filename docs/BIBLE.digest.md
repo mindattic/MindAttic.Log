@@ -74,4 +74,4 @@ only, on both backends. It is a viewer, not a second writer that could race the 
 
 
 ## Status index (from USER_STORIES.md)
-- done: 11 | partial: 3 | planned: 3
+- done: 12 | partial: 3 | planned: 3
