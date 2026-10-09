@@ -49,10 +49,12 @@ at all — plus a WPF + WebView2 Reader app to browse all three.
     security reviewer, a file-recovery tool — not an operator reading application logs. Folding
     either into `MindAttic_Log`'s generic schema would be a schema regression for its real
     consumer, not a consolidation win. Two independent migrations reached this same conclusion.
-  - **A live production process is never restarted by a logging migration.** Prose's additive
-    `MindAttic_Log` sink (docs/MIGRATION.md) is committed and pushed, but the already-running Hub
-    process was deliberately left untouched — it adopts the new sink on its next ordinary
-    redeploy, like any other code change, not because a migration decided to bounce it.
+  - **A live production process is never restarted by a logging migration on its own authority.**
+    Prose's additive `MindAttic_Log` sink (docs/MIGRATION.md) was initially committed and pushed
+    with the already-running Hub process left untouched. It was redeployed and restarted only
+    after being asked and getting explicit confirmation, via the Hub's own official mechanism
+    (`deploy-hub.bat`), not bounced ad hoc — the same process any other code change to Prose would
+    go through.
   - **Interactive UI output is not a log, even when it goes to a console.** MindAttic.Launcher's
     `AnsiConsole.MarkupLine` calls across its 17 TUI files, and MindAttic.Deploy's equivalent, are
     the menu/progress text a human is reading in real time — the product, not a diagnostic trail

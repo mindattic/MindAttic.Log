@@ -113,8 +113,10 @@ updated: 2026-10-08
   ones, writing `MindAttic_Log` into the same database, with nothing existing touched, rerouted,
   or removed. *(verified by Prose repo's `MindAtticLogSqlServerTests` —
   `AddMindAtticLog_SqlServer_Writes_A_Readable_Row_Through_ILogger` — against a throwaway LocalDB
-  database; full suite 3007/3026 unchanged before/after; the live running Hub process was
-  deliberately not restarted to pick it up.)*
+  database; full suite 3007/3026 unchanged before/after. The live Hub process was subsequently
+  redeployed and restarted — with explicit confirmation requested and given first — via its own
+  official mechanism; a direct query against the real `Prose` database confirmed genuine startup
+  diagnostics landing within seconds of the restart.)*
 - **LOG-US-G2 🟡** As a consumer with no DI container at all (MindAttic.Launcher — Spectre.Console.Cli
   constructs commands directly, no `IServiceCollection`), the pipeline can still be wired by
   calling `WriteToMindAtticLog` directly on a `LoggerConfiguration` at the entry point, with a
