@@ -11,98 +11,80 @@ updated: 2026-10-08
 
 > Tracks which MindAttic apps have been audited for existing logging and migrated onto the shared
 > `MindAttic.Log` pipeline. Not a bible section — this is working state, expected to change on
-> every migration PR. ✅ migrated · 🟡 audited, not yet migrated · ⬜ not yet looked at.
+> every migration PR. ✅ migrated · 🟡 audited, not yet migrated · ⬜ not yet looked at ·
+> **n/a** audited and correctly left alone (no real integration point, or a narrowly-scoped
+> domain table that shouldn't be folded into `MindAttic_Log` — see each row's reasoning).
 >
-> Seeded 2026-10-08 from a repo-wide survey (read-only audit of every `MindAttic.*` repo plus
-> Prose, Tutor, Automata, GridGame2026, ChiMesh, Formicarium, KdpPublish, MediaButler). See
-> `docs/BIBLE.md` §4.1 for what the survey found about Prose's schema specifically.
+> Every row below has been individually re-checked against the real repo as of 2026-10-08 — do
+> not trust stack/DB-backend columns from a prior pass without re-reading the actual code; several
+> rows in the original 2026-10-08 survey turned out to be wrong (Tutor's "SQL Server" database is
+> auth-only; Ideas.Library is archived; Mobile/Formicarium/MediaButler needed a closer look than
+> the first grep-only pass gave them).
 
 ## Legend
 
 - **Tier** — `SqlServer`, `Sqlite` (app-owned `.db`), or `Sqlite` (no-database, rolled file) — see
-  `docs/BIBLE.md` §4.1. The no-database tier is still SQLite, not plain text (§4.2).
-- **Current logging** — what the survey found at each app as of 2026-10-08.
+  `docs/BIBLE.md` §4.1/§4.2. The no-database tier is SQLite, not plain text.
+- **n/a reasoning** — every n/a row was a deliberate decision, not a skip. Forcing a sink onto a
+  stateless library or a pure-TUI tool invents a log where none of the app's real behavior calls
+  for one — see LOG-LAW-1 (no per-app drift) and the "ecosystem pattern" note below.
 
 ## Status
 
-| Project | Stack | DB backend | Tier | Current logging (as surveyed) | Status |
+| Project | Stack | DB backend | Tier | What was found / done | Status |
 |---|---|---|---|---|---|
-| Prose | .NET | SQL Server | SqlServer | Serilog daily text files (`Prose.Hub/Program.cs`) parsed back by `LoggingService`; separate derived `LogIssue` triage table. Reference model for the schema — see BIBLE §4.1. | 🟡 |
-| MindAttic.Ideas | .NET Blazor | SQL Server (`CmsDbContext` — genuine general-purpose content DB: Sites, Pages, Media, Settings, Workflows, plus MindAttic.Authentication's identity tables mixed in) | SqlServer | Migrated: `AddIdeasCore` calls `AddMindAtticLog` with `Destination = SqlServer` pointed at the same connection string `CmsDbContext` uses; `MindAttic_Log` table created once at startup (dev-only, next to the existing EF migration) via `LogSchema.CreateTableSqlServer`. First live proof of the SQL Server tier — caught and fixed a real bug (see docs/USER_STORIES.md LOG-US-D1): `Level.StoreAsEnum` defaulted to storing level as text, which didn't fit the `TINYINT` column. Ideas had almost no prior `ILogger<T>` usage to extract (one call site in `DemoAccess.cs`) — this mainly establishes the pipeline for logging going forward rather than migrating a large existing surface. Full suite: 586/586 passing (1 new `[Explicit]` live-SQL-Server test, run manually and verified). | ✅ |
-| MindAttic.Authentication | .NET | Host-provided (SQL Server typical) | SqlServer | `ILogger<T>` + custom `AuthAuditWriter` → `AuthAuditLog` table (security-audit specific, not general app logging — likely stays separate from `MindAttic_Log`). | ⬜ |
-| MindAttic.Ideas | .NET Blazor | SQL Server (`CmsDbContext`) | SqlServer | `ILogger` present, no durable sink found. | ⬜ |
-| Tutor | .NET Blazor | SQL Server, but auth-only (`TutorAuthDbContext` is MindAttic.Authentication's identity schema; "course content and per-user progress stay JSON" per its own doc comment) | Sqlite (rolled file) | Migrated: re-checked 2026-10-08 and found Tutor has its own hand-rolled logging — a static `Log`/`LogStore` facade (`Log.Info`/`Warn`/`Error`/`Critical`, used throughout the app) persisted by `LogStorageService` as a single `app-logs.json` **rewritten whole on every save** — exactly the monolithic-file anti-pattern this repo's design rejected (see BIBLE §4.2). Added `MindAtticLogBridge`, which subscribes to `LogStore.EntryAdded` and forwards every entry into the rolled-SQLite tier — zero call-site changes, existing JSON persistence and live in-app viewer left untouched. TutorAuth's SQL Server DB was deliberately not used: it's a narrowly-scoped identity schema (same reasoning as MindAttic.Authentication's own `AuthAuditLog`), not a general-purpose app database. | ✅ |
-| Automata | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | Migrated: `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites (`WorkflowEngine`/`FlowAuthoringService`/`ReplayEngine`/etc.) are unchanged; only the sink underneath is new. | ✅ |
-| MindAttic.Launcher | .NET (net10.0-windows) | none | Sqlite (rolled file) | Raw `Console.Write*`/`AnsiConsole.MarkupLine` across 17 files (Commands/, Menus/, Services/, Ui/) — **no structured logging at all**. First integration target: no existing pipeline to reconcile with. | ⬜ |
-| KdpPublish | .NET (WPF) | none | — | Re-checked 2026-10-08: KdpPublish has no logging surface of its own. Its only own-code "logging" is a `#if DEBUG`-only `File.AppendAllText` crash dump in `App.xaml.cs` — deliberately dependency-free so it still works if a catastrophic crash breaks everything else (same reasoning Automata.App uses, see its own App.xaml.cs comment), not a candidate for routing through a DI-based sink. All of KdpPublish's real logging flows through vendored `Prose.Core` (`AddProseServices()`); migrating it is the same work as migrating Prose, not a separate no-DB target. | n/a — folded into Prose |
-| MindAttic.Vault | .NET | none (settings store) | Sqlite (rolled file) | `ILogger<T>` in `AlertDispatcher`, `MonitorBackgroundService`; no durable sink. | ⬜ |
-| MindAttic.Legion | .NET | none | Sqlite (rolled file) | `Microsoft.Extensions.Logging` referenced in DI extensions; no durable sink. | ⬜ |
-| MindAttic.Deploy | .NET CLI + Node | none | Sqlite (rolled file) | No logging detected via grep — likely console-only. | ⬜ |
-| MindAttic.Bob | — | none found | — | No app logging surface found (installer/CLI). | ⬜ |
-| MindAttic.Cryptography | — | none | — | No csproj found at survey depth; minimal library footprint. | ⬜ |
-| MindAttic.Export | .NET | none | Sqlite (rolled file) | No logging detected. | ⬜ |
-| MindAttic.Helpers | .NET | none | Sqlite (rolled file) | No logging detected (shared helper library). | ⬜ |
-| MindAttic.Ideas.Library | .NET | none | Sqlite (rolled file) | No logging detected (widget/theme library). | ⬜ |
-| MindAttic.Media | .NET (+ Azure variant) | none found | — | No logging detected. | ⬜ |
-| MindAttic.Mobile | .NET | none | Sqlite (rolled file) | No logging detected (WebSocket/xterm bridge). | ⬜ |
-| MindAttic.Psst | .NET | none | Sqlite (rolled file) | No logging detected (notification tool). | ⬜ |
-| MindAttic.Web | mixed Node + .NET | none | — | `console.log` in JS components; not a .NET consumer of this package. | ⬜ |
-| Formicarium | .NET dashboard + firmware | none found | — | `ILogger`-style services (`ColonyMonitor`, `TelemetryStore`); no durable sink confirmed. | ⬜ |
+| **MindAttic.Ideas** | .NET Blazor | SQL Server (`CmsDbContext` — genuine general-purpose content DB: Sites, Pages, Media, Settings, Workflows, plus MindAttic.Authentication's identity tables mixed in) | SqlServer | `AddIdeasCore` calls `AddMindAtticLog` pointed at the same connection string `CmsDbContext` uses; table created once at startup (dev-only) via `LogSchema.CreateTableSqlServer`. **First live proof of the SQL Server tier** — caught and fixed a real bug (LOG-US-D1): `Level.StoreAsEnum` defaulted to storing level as text, which didn't fit the `TINYINT` column. Almost no prior `ILogger<T>` usage existed to extract (one call site) — this mainly establishes the pipeline going forward. Full suite: 586/586. | ✅ |
+| **Tutor** | .NET Blazor | SQL Server, but auth-only (`TutorAuthDbContext` is MindAttic.Authentication's identity schema; "course content and per-user progress stay JSON" per its own doc comment) — general logging is a no-database problem here | Sqlite (rolled file) | Had its own hand-rolled `Log`/`LogStore` facade (`Log.Info`/`Warn`/`Error`/`Critical`), persisted by `LogStorageService` as a single `app-logs.json` **rewritten whole on every save** — the exact monolithic-file anti-pattern this repo's design rejected. `MindAtticLogBridge` forwards `LogStore.EntryAdded` into the rolled-SQLite tier, zero call-site changes, existing JSON persistence and live in-app viewer left untouched. Full suite: 456/456 (+2 new). | ✅ |
+| **Automata** | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites unchanged. This run caught the original `services.AddSerilog(...)` vs `services.AddLogging(...)` bug (LOG-US-C1). Full suite: 571/571 (+1 new). | ✅ |
+| **MindAttic.Mobile** | .NET (ASP.NET Core minimal API) | none | Sqlite (rolled file) | WebSocket + xterm.js terminal bridge, single-file app, no database, no test project. Wired `AddMindAtticLog` (rolled-file tier); converted the two startup `Console.WriteLine` calls to `app.Logger`, threaded `ILogger` into `TerminalSession` for its one real error path (Claude API call failures). No test project exists, so verified **live**: ran the built exe, confirmed real log lines landed in the rolled `.db` file. | ✅ |
+| **Formicarium** | .NET Blazor Server (Dashboard) + separate firmware | SQL Server (`FormicariumDbContext` — genuine general-purpose DB: Samples, RiserSamples, BuildProgress; no auth tables mixed in) | SqlServer | `ColonyMonitor`/`TelemetryStore` already used `ILogger<T>`. Wired `AddMindAtticLog` (SQL Server tier) in `Program.cs`, table created at startup next to the existing EF migration. No Dashboard test project exists — verified **live** against the real dev LocalDB: app started cleanly, **20 real rows landed in `dbo.MindAttic_Log`**. Added a repo-local `nuget.config` (none existed). | ✅ |
+| **MediaButler** | .NET CLI (Spectre.Console) + WPF (BlazorWebView) | none | Sqlite (rolled file) | No prior diagnostic logging in either front door — the WPF app had **zero crash visibility** before this (no `DispatcherUnhandledException`/`AppDomain.UnhandledException` handlers at all). Added `CrashLog` (rolled-file tier) wired into both front doors' now-new unhandled-exception handling. A pre-existing NDJSON `AuditLog` (file-mutation records: op/kind/from/to) was correctly left untouched — a narrowly-scoped business record, not a candidate for folding into `MindAttic_Log` (same reasoning as `AuthAuditLog`). Full suite: 298/298 (+1 new). | ✅ |
+| **Prose** | .NET | SQL Server | SqlServer | Serilog daily text files (`Prose.Hub/Program.cs`) parsed back by `LoggingService`; separate derived `LogIssue` triage table. Reference model for the schema (BIBLE §4.1). **Deliberately deferred**: live production pipeline (14-day retention, live ring buffer, `LogIssue` triage) already relied on; re-vendoring `Prose.Core` touches every `Prose.*` front door (Hub, KdpPublish) at once. Holding for explicit go-ahead rather than migrating unilaterally. | 🟡 |
+| **MindAttic.Launcher** | .NET (net10.0-windows) | none | Sqlite (rolled file) | Raw `Console.Write*`/`AnsiConsole.MarkupLine` across 17 files — no structured logging at all. **Blocked**: has uncommitted changes in exactly the files (`HostAgentCommand.cs`, `AgentProviderRegistry.cs`, `ClaudeStatusService.cs`) a migration would touch; held per explicit instruction not to step on in-progress work. Needs care distinguishing real diagnostic logging from intentional `AnsiConsole` TUI rendering when it is picked up — not every `Console.Write*` call in a TUI app is a log line to extract. | ⬜ |
+| KdpPublish | .NET (WPF) | none | — | No logging surface of its own. Its only own-code "logging" is a `#if DEBUG`-only `File.AppendAllText` crash dump, deliberately dependency-free (same reasoning Automata.App uses for its own crash log) — not a sink candidate. All real logging flows through vendored `Prose.Core`; migrating it is the same work as migrating Prose, not a separate step. | n/a — folds into Prose |
+| MindAttic.Authentication | .NET | Host-provided (SQL Server typical) | — | `ILogger<T>` + custom `AuthAuditWriter` → `AuthAuditLog` table. Narrowly-scoped security-audit schema (event type, outcome, hashed IP, user agent) — independently confirmed by two separate migrations (Tutor, MediaButler) as the right pattern to *not* fold into general `MindAttic_Log` rows. | n/a — separate audit schema by design |
+| MindAttic.Deploy | .NET CLI (Spectre.Console TUI) | none | — | No DI host, no `ILogger<T>`. `AnsiConsole.MarkupLine(...)` output IS the interactive deploy-progress UI shown to the operator, not a diagnostic log — same shape as Launcher's deferred case. | n/a |
+| MindAttic.Export | .NET (library + CLI) | none | — | Pure, stateless, one-shot manuscript-rendering library (Markdown → PDF/DOCX/EPUB). Zero `ILogger<T>` anywhere; the CLI's only output is a single `Console.Error.WriteLine` on bad arguments. No logging concept exists to route. | n/a |
+| MindAttic.Helpers | .NET (library) | none | — | Two tiny static-utility files (`AbstractArtGenerator.cs`, `PiHelper.cs`). No DI, no database, no logging surface. | n/a |
+| MindAttic.Bob | PowerShell (`bob.ps1`/`bob.bat`) | none | — | Zero `.csproj` files — not a .NET application at all. Zips `%APPDATA%\MindAttic` and shells out to `sqlcmd` for backups. MindAttic.Log has no PowerShell-side equivalent. | n/a — non-.NET |
+| MindAttic.Cryptography | — | none | — | Confirmed empty placeholder (its own README says so explicitly) — planned but not started. Nothing to integrate, same state MindAttic.Log itself was in before this session. | n/a — placeholder repo |
+| MindAttic.Ideas.Library | .NET (Razor Class Libraries) | none | — | Confirmed **retired/archived** — merged into `MindAttic.Ideas/library` on 2026-06-12, GitHub repo archived. Zero `ILogger`/DI/`Program.cs` — compiled UI citizens consumed by MindAttic.Ideas at runtime (already migrated), not a standalone service. | n/a — archived |
+| MindAttic.Media | .NET (library, + Azure variant) | none | — | Pure class library with no DI composition root of its own (`AddMedia<T>()` is called *by* a consuming app's container, e.g. Ideas'). Any future logging flows through automatically once the consuming app has its own pipeline wired — no separate integration point. | n/a |
+| MindAttic.Psst | .NET CLI | none | — | Short-lived passthrough wrapper (`psst -- <command>`); entire purpose is piping output to the terminal. No DI container, no `ILogger` anywhere, explicitly "no daemon, nothing listening." Opening a SQLite connection per few-second invocation for 1-2 status lines would cost more than it's worth against the tool's own minimal-footprint design. | n/a |
+| MindAttic.Web | Static HTML sites + Node | none | — | No .NET project anywhere in the repo (mindattic.com, mindatticcares.com, ryandebraal.com are static sites; the rest is a JS test package). No integration point for a .NET package. | n/a — non-.NET |
+| MindAttic.Vault | .NET | none (settings store) | Sqlite (rolled file) | `ILogger<T>` in `AlertDispatcher`, `MonitorBackgroundService`; no durable sink. Not yet picked up — lower priority than apps with real logging volume, since Vault's own operations are infrequent. | ⬜ |
+| MindAttic.Legion | .NET | none | Sqlite (rolled file) | `Microsoft.Extensions.Logging` referenced in DI extensions; no durable sink. Not yet picked up. | ⬜ |
+| ChiMesh | PowerShell (LoRa/Meshtastic node provisioning) | none | — | Pure PowerShell hardware-provisioning CLI, no .NET at all. | n/a — non-.NET |
 | GridGame2026 | Unity/C# | n/a | — | Unity's own logging; not a service app — out of scope for this pipeline. | skip |
-| ChiMesh | — | none | — | No logging detected (console/tools/scripts). | ⬜ |
-| MediaButler | .NET | none | — | No logging detected. | ⬜ |
 
-## Ecosystem pattern (from the survey)
+## Ecosystem pattern (confirmed across the full pass)
 
-Most .NET apps already call `ILogger<T>` at their call sites — **none wire a durable sink** except
-Prose (Serilog file) and Authentication (a purpose-built security-audit table that should likely
-stay separate from general `MindAttic_Log` rows rather than be folded in). Three backend shapes
-exist in the wild, confirming the three-tier design: SQL Server (Ideas, Tutor, Authentication's
-host), SQLite (Automata), no-DB (Launcher, Vault, Legion, Deploy, and most tool-shaped repos —
-KdpPublish hand-rolls a file logger today). `ILogger<T>` being the near-universal call-site API
-across the ecosystem is exactly why `services.AddMindAttic Log(...)` targets the DI/Serilog seam
-instead of asking every app to change its logging calls.
+`ILogger<T>` is the near-universal call-site API for apps that have one at all — which is exactly
+why `services.AddMindAtticLog(...)` targets the DI/Serilog seam instead of asking every app to
+change its logging calls. Two confirmed exceptions needed a different approach: Tutor's own
+`Log`/`LogStore` facade (bridged directly, not through DI) and MediaButler's WPF app, which had no
+logging concept at all before this pass (not even unhandled-exception handling) and got one built
+fresh. A large fraction of the ecosystem — roughly half of what was checked — turned out to have
+**no real integration point**: pure libraries with no DI host of their own, stateless one-shot
+tools, PowerShell scripts with no .NET surface, static sites, archived repos, and apps whose only
+"logging" is actually their interactive TUI output. Forcing a sink onto any of those would have
+meant inventing a log where the app's real behavior never called for one — each is recorded above
+with its specific reasoning rather than silently skipped.
 
-## Suggested migration order
+## What's left
 
-1. **Automata ✅ (2026-10-08)** — done first instead of Launcher: Launcher had uncommitted changes
-   in exactly the files that would need touching, so Automata went first to prove the app-owned-
-   SQLite tier without stepping on in-progress work. `MindAtticSqliteSink`'s `services.AddSerilog(...)`
-   call turned out not to register `ILogger<T>` — caught by this migration's own integration test,
-   fixed in `MindAttic.Log` (now `services.AddLogging(builder => builder.AddSerilog(...))`), see
-   `docs/USER_STORIES.md` LOG-US-C1/C2. Both `MindAttic.Log.Tests` (9/9) and the full Automata suite
-   (571/571) pass with the fix.
-2. **Tutor ✅ (2026-10-08)** — originally assumed to be a SQL Server candidate (it has a SQL Server
-   database), but that database turned out to be MindAttic.Authentication's identity schema only —
-   general app logging there is a no-database problem, same tier as Automata/Launcher. Tutor also
-   turned out to have its own hand-rolled `Log`/`LogStore` facade (not `ILogger<T>`) persisting to
-   a single whole-file-rewrite JSON — the exact monolithic-file shape this repo's design rejected.
-   `MindAtticLogBridge` forwards `LogStore.EntryAdded` into the rolled-SQLite tier with zero
-   call-site changes. Full Tutor suite: 456/456 passing (plus 2 new tests for the bridge). This is
-   the second confirmed case (after Launcher's `Console`/`AnsiConsole` calls) of an app with a
-   logging call-site pattern that isn't `ILogger<T>` — worth checking explicitly for every
-   remaining app rather than assuming the ecosystem-wide pattern from docs/MIGRATION.md's original
-   survey holds everywhere.
-3. **MindAttic.Launcher** — once current uncommitted work there lands, proves the no-DB/rolled-
-   SQLite tier in the project this repo was built alongside. Needs care distinguishing real
-   diagnostic logging from intentional `AnsiConsole` TUI rendering (see survey notes above) —
-   not every `Console.Write*` call in a TUI app is a log line to extract.
-4. **Prose (and KdpPublish/every other Prose.\* front door along with it)** — re-checked
-   2026-10-08: KdpPublish has no logging of its own; everything routes through vendored
-   `Prose.Core`. Migrating Prose.Core's pipeline migrates every front door that depends on it
-   (Prose.Hub, KdpPublish, and any other `Prose.*` app) in one pass — there is no separate
-   "KdpPublish-only" step. Last on purpose: Prose.Core already has a working pipeline under real
-   use (14-day retention, live ring buffer, `LogIssue` triage) that nothing should regress
-   casually, and re-vendoring a shared package touches every consumer at once.
-5. **Ideas ✅ (2026-10-08)** — confirmed `CmsDbContext` is a genuine general-purpose SQL Server
-   database (not auth-only like Tutor's), and `ILogger<T>` (not a custom facade) is its call-site
-   pattern, though barely used yet. This was the first live, non-SQLite proof of the SQL Server
-   tier end to end.
+1. **MindAttic.Launcher** — blocked on your uncommitted changes landing first.
+2. **Prose** (and every `Prose.*` front door that depends on vendored `Prose.Core`, including
+   KdpPublish) — held for explicit go-ahead given it's a live production pipeline, not migrated
+   unilaterally.
+3. **MindAttic.Vault** / **MindAttic.Legion** — have `ILogger<T>` call sites but no durable sink
+   yet; lower priority (infrequent operations) than the apps already done, not yet picked up.
 
 ## Non-.NET apps
 
-No non-.NET MindAttic app was found with a logging surface in this survey (MindAttic.Web's
-`console.log` usage is browser-side JS, not a service that would adopt this package). If one
-appears later, it needs a language-native writer that targets the same **wire schema**
-(`docs/BIBLE.md` §4.1) — e.g. a Python module writing the same row shape into the same SQLite
-table — rather than a port of the C# library.
+Confirmed in this pass: MindAttic.Bob and ChiMesh are pure PowerShell with no .NET surface;
+MindAttic.Web is static HTML/JS with no .NET project at all. None had a logging surface this
+package could attach to. If a non-.NET app with real logging needs ever appears, it needs a
+language-native writer that targets the same **wire schema** (`docs/BIBLE.md` §4.1) — e.g. a
+Python module writing the same row shape into the same SQLite table — rather than a port of the
+C# library.

@@ -78,6 +78,32 @@ updated: 2026-10-08
   fit `LogSchema`'s `TINYINT` column — fixed to `true` (Serilog's `LogEventLevel` is numbered
   identically to `Models.LogSeverity`, so both backends now store the same integer).
 
+## Epic F — Ecosystem-wide pass
+
+- **LOG-US-F1 🟡** As a consumer with no test project of its own (Mobile, Formicarium), the pipeline
+  can still be verified without inventing test infrastructure uninvited: run the real built app
+  against a real (or dev LocalDB) database and confirm actual rows land. Mobile: ran the built exe,
+  confirmed log lines reached the rolled `.db` file. Formicarium: ran the Dashboard against its dev
+  LocalDB, confirmed 20 real rows in `dbo.MindAttic_Log`. Verified live, not by a named automated
+  test — no test token to cite, honestly partial by this file's own convention (see
+  docs/MIGRATION.md for the full account).
+- **LOG-US-F2 ✅** As a consumer with zero prior crash visibility (MediaButler's WPF front door had
+  no `DispatcherUnhandledException`/`AppDomain.UnhandledException` handlers at all before this),
+  the rolled-file tier can back a purpose-built crash log wired into newly-added handlers, not just
+  an existing logging call site. *(verified by MediaButler repo's `CrashLogTests`; full suite
+  298/298 still green.)*
+- **LOG-US-F3 ✅** As the library's own design, a narrowly-scoped domain-specific record table
+  (MindAttic.Authentication's `AuthAuditLog`; MediaButler's NDJSON file-mutation `AuditLog`) is
+  correctly never folded into `MindAttic_Log` — confirmed independently by two separate migrations
+  reaching the same conclusion for different reasons, not just asserted once. See LOG-LAW-1.
+- **LOG-US-F4 🟡** As the library's own design, an app with no real integration point (a stateless
+  library, a pure-TUI tool whose "logging" is actually its interactive UI, a non-.NET script, an
+  archived repo) is correctly left untouched rather than having a sink forced onto it. Confirmed
+  across ten repos in a single ecosystem-wide pass (MindAttic.Deploy, Export, Helpers, Bob,
+  Cryptography, Ideas.Library, Media, Psst, Web, ChiMesh) — see docs/MIGRATION.md for each one's
+  specific reasoning. No test token: this story is a design judgment confirmed by absence of
+  unnecessary code, not something an automated test asserts.
+
 ## Epic E — MindAttic.Log.Reader
 
 - **LOG-US-E1 🟡** As an operator, I can open a folder of rolled `MindAttic.Log.*.db` files, filter
