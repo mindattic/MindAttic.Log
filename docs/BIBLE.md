@@ -19,7 +19,7 @@ inside the app's own SQLite database, or a dedicated rolling SQLite file for app
 at all — plus a WPF + WebView2 Reader app to browse all three.
 
 ## 2. The product promise {#LOG-§2}
-- **One schema, every backend.** `Models/LogEntry.cs` and `Schema/LogSchema.cs` define the exact
+- **One schema, every backend.** `MindAttic.Log/Models/LogEntry.cs` and `MindAttic.Log/Schema/LogSchema.cs` define the exact
   same columns whether the sink is SQL Server or SQLite. A query written for one tier works on the
   other with only the table prefix changed.
 - **No call-site change.** Every surveyed app already uses `ILogger<T>` (see docs/MIGRATION.md).
@@ -84,7 +84,7 @@ staying only slightly larger than the equivalent text log;
 SQLite with no daemon; and the general guidance from that research — promote the columns you
 actually filter on (timestamp, level, application, category) into real indexed columns, keep WAL
 on for concurrent readers, roll/retain by file rather than by row — is exactly what
-`Schema/LogSchema.cs`, `Sinks/MindAtticSqliteSink.cs`, and `Sinks/LogFileRoller.cs` do.
+`MindAttic.Log/Schema/LogSchema.cs`, `MindAttic.Log/Sinks/MindAtticSqliteSink.cs`, and `MindAttic.Log/Sinks/LogFileRoller.cs` do.
 
 Rolling is monthly (`MindAttic.Log.<yyyy-MM>.db`), not daily like Prose's text files — a queryable
 DB file stays useful well past a day, so daily rotation would just mean the Reader has to open more
@@ -154,22 +154,22 @@ broken under pressure), not a local fork of the table.
 ### {#LOG-LAW-2} This library resolves no credentials.
 `MindAtticLogOptions.SqlServerConnectionString` is a plain string the host supplies; `MindAttic.Log`
 never reads `%APPDATA%`, Key Vault, or any other secret source itself. The host resolves it through
-MindAttic.Vault before calling `AddMindAtticLog`. (`MindAtticLogOptions.cs`.)
+MindAttic.Vault before calling `AddMindAtticLog`. (`MindAttic.Log/MindAtticLogOptions.cs`.)
 
 ### {#LOG-LAW-3} A logging failure never becomes an application failure.
 Every sink catches and swallows its own storage-layer exceptions (`SqliteException` in
 `MindAtticSqliteSink.Flush`); a full disk, a locked file, or an unreachable SQL Server must never
-throw out of an `ILogger.LogInformation(...)` call site. (`Sinks/MindAtticSqliteSink.cs`.)
+throw out of an `ILogger.LogInformation(...)` call site. (`MindAttic.Log/Sinks/MindAtticSqliteSink.cs`.)
 
 ### {#LOG-LAW-4} The Reader never writes.
 `MindAttic.Log.Reader` opens SQLite connections in `SqliteOpenMode.ReadOnly` and issues `SELECT`
 only, on both backends. It is a viewer, not a second writer that could race the app's own sink.
-(`Services/LogQueryService.cs`.)
+(`MindAttic.Log.Reader/Services/LogQueryService.cs`.)
 
 ## 6. Glossary {#LOG-§6}
 - **Tier** — which of the three backends an app's `MindAtticLogOptions.Destination` targets:
   SQL Server, SQLite (app-owned `.db`), or SQLite (no-database, rolled file).
-- **Wire schema** — the column set in `Schema/LogSchema.cs`, identical across both backends.
+- **Wire schema** — the column set in `MindAttic.Log/Schema/LogSchema.cs`, identical across both backends.
 - **Rolled file** — a `MindAttic.Log.<yyyy-MM>.db` produced by `LogFileRoller` for the
   no-database tier.
 - **Sink** — the Serilog `ILogEventSink` (or `Serilog.Sinks.MSSqlServer` configuration) that
