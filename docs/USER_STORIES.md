@@ -4,16 +4,19 @@ project: MindAttic.Log
 code: LOG
 layer: stories
 status: living
-updated: 2026-10-08
+updated: 2026-10-14
 ---
 
 # MindAttic.Log — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test that proves it.
 > "Consumer" = a MindAttic app taking a dependency on the `MindAttic.Log` package.
-> Verified 2026-10-08: `dotnet test MindAttic.Log.slnx` → Failed: 0, Passed: 9, Total: 9 (exit 0).
-> Also verified end to end against a real consumer: `dotnet test Automata.Tests.csproj` → 571/571
-> passing, including `MindAtticLogIntegrationTests` (Automata repo) which writes a log row through
-> `AddMindAtticLog` and reads it back out of the same `automata.db` file EF owns.
+> Verified 2026-10-14: `dotnet test MindAttic.Log.slnx` → Failed: 0, Passed: 12, Total: 12 (exit 0),
+> following the 2026-10-14 single-tier rewrite (docs/BIBLE.md §1.1). Epics B and D's older
+> entries (`AddMindAtticLog_Makes_ILogger_Of_T_Resolvable` aside) describe the superseded/retired
+> rolled-file and SQL-Server-write tiers and are kept as historical record, not current behavior.
+> Each already-migrated consumer app (Automata, Ideas, Prose, Tutor, …) needs its own Phase-2 pass
+> (docs/MIGRATION.md) onto the new standalone database before its own entries here are current
+> again.
 
 ## Epic A — The shared schema
 
@@ -31,16 +34,34 @@ updated: 2026-10-08
   with the table already in it, so there's no separate migration step for the no-database tier.
   *(verified by `Constructor_Creates_Table_Even_With_No_Events_Emitted`.)*
 
-## Epic B — The no-database (rolled SQLite) tier
+## Epic B — Standalone database & row-based retention
+> **Superseded 2026-10-14** (see docs/BIBLE.md §1.1): this epic used to be "the no-database
+> (rolled SQLite) tier" — B1/B2/B3 below described `LogFileRoller`'s monthly-file rolling and
+> file-count retention, which no longer exist now that every app (not just the no-database ones)
+> gets one standalone, never-rolled `MindAttic.Log.db`. Rewritten in place rather than left to rot,
+> since the underlying feature is gone, not renamed.
 
-- **LOG-US-B1 ✅** As a consumer with no database, the rolled file path embeds the year and month
-  it was written in, so a Reader can skip files outside a requested date range without opening
-  them. *(verified by `CurrentPath_Embeds_Year_And_Month`.)*
-- **LOG-US-B2 ✅** As a consumer, retention keeps only the N most recently-named rolled files and
-  deletes the rest, so disk usage for the no-database tier is bounded. *(verified by
-  `PruneOldFiles_Keeps_Only_The_Most_Recent_N`.)*
-- **LOG-US-B3 ✅** As a consumer who sets retention to zero, no files are deleted (zero means "no
-  limit", not "delete everything"). *(verified by `PruneOldFiles_With_Zero_Retention_Deletes_Nothing`.)*
+- **LOG-US-B1 ✅** As a consumer, every app's database is one standalone, Vault-located
+  `MindAttic.Log.db` — never rolled, never shared with the app's own store — resolved via
+  `VaultPaths.LoggingDbPath(appId)` and passed in as `MindAtticLogOptions.DbPath`. *(verified by
+  `AddMindAtticLog_Makes_ILogger_Of_T_Resolvable`, Vault's own `LoggingDbPath_Combines_Roaming_Root_Bucket_App_And_FileName`.)*
+- **LOG-US-B2 ✅** As a consumer, a background sweep deletes rows older than `RetainedDays` and
+  reclaims the freed space, so disk usage stays bounded without ever rolling or replacing the file.
+  *(verified by `PruneOldRows_Deletes_Rows_Older_Than_RetainedDays_But_Keeps_Newer_Ones`.)*
+- **LOG-US-B3 ✅** As a consumer migrating off the retired SQL Server/app-owned-SQLite tiers,
+  `MindAtticLogMigrator` copies that app's historical rows into its new standalone database
+  idempotently (a re-run after a partial failure doesn't duplicate rows) and only drops the source
+  table when explicitly told to. *(verified by `MigrateFromSqliteAsync_Copies_All_Rows_Into_Destination`,
+  `MigrateFromSqliteAsync_Rerun_Does_Not_Duplicate_Already_Copied_Rows`,
+  `MigrateFromSqliteAsync_With_DropSource_Removes_The_Source_Table`,
+  `MigrateFromSqliteAsync_Without_DropSource_Leaves_The_Source_Table_Intact`; the SQL Server source
+  path against a real throwaway LocalDB database by
+  `MigrateFromSqlServerAsync_Copies_Rows_Into_Destination_And_Drops_Source_When_Asked`,
+  `[Explicit]` same convention as this ecosystem's other live-SQL-Server tests.)* That LocalDB run
+  caught a real bug: an untyped `DateTime` watermark parameter was inferred as the legacy SQL
+  `datetime` type (range 1753–9999) instead of the column's own `datetime2`, so
+  `DateTime.MinValue` (the no-prior-migration watermark) overflowed the *parameter* on the very
+  first run — fixed by pinning `SqlDbType.DateTime2` explicitly.
 
 ## Epic C — DI integration
 
@@ -66,8 +87,13 @@ updated: 2026-10-08
   still green after the change.)*
 
 ## Epic D — The SQL Server tier
+> **Superseded 2026-10-14** (see docs/BIBLE.md §1.1): `LogDestination.SqlServer`/
+> `WriteToMindAtticLog(LogDestination.SqlServer)`/`MindAtticLogEnricher` are deleted — the library
+> no longer writes to SQL Server at all. D1 below is kept as the historical record of what shipped
+> and was verified at the time; SQL Server now appears only as a one-shot *read* source for
+> `MindAtticLogMigrator` (Epic B, LOG-US-B3), never an ongoing write tier.
 
-- **LOG-US-D1 ✅** As a consumer with SQL Server, `WriteToMindAtticLog(LogDestination.SqlServer)`
+- **LOG-US-D1 ✅ (retired)** As a consumer with SQL Server, `WriteToMindAtticLog(LogDestination.SqlServer)`
   configures `Serilog.Sinks.MSSqlServer` with `AutoCreateSqlTable = false` and additional columns
   mapped onto `LogSchema`'s names, and a row written through `ILogger<T>` actually lands and reads
   back correctly. *(verified by Ideas repo's `MindAtticLogSqlServerTests` —
@@ -107,7 +133,7 @@ updated: 2026-10-08
 
 ## Epic G — High-stakes and no-DI-container consumers
 
-- **LOG-US-G1 ✅** As the reference app itself (Prose, a live production system with a 14-day
+- **LOG-US-G1 ✅ (historical — Phase-1 only)** As the reference app itself (Prose, a live production system with a 14-day
   Serilog file pipeline and `LogIssue` triage already relied on), the shared pipeline can be
   adopted additively — a second `builder.Logging.AddSerilog(...)` provider alongside the existing
   ones, writing `MindAttic_Log` into the same database, with nothing existing touched, rerouted,
@@ -116,7 +142,9 @@ updated: 2026-10-08
   database; full suite 3007/3026 unchanged before/after. The live Hub process was subsequently
   redeployed and restarted — with explicit confirmation requested and given first — via its own
   official mechanism; a direct query against the real `Prose` database confirmed genuine startup
-  diagnostics landing within seconds of the restart.)*
+  diagnostics landing within seconds of the restart.)* The SQL Server write path this depended on is
+  retired (see Epic D); Prose needs its own Phase-2 pass (docs/MIGRATION.md) onto a standalone
+  `MindAttic.Log.db`, via `MindAtticLogMigrator`, before this story is current again.
 - **LOG-US-G2 🟡** As a consumer with no DI container at all (MindAttic.Launcher — Spectre.Console.Cli
   constructs commands directly, no `IServiceCollection`), the pipeline can still be wired by
   calling `WriteToMindAtticLog` directly on a `LoggerConfiguration` at the entry point, with a

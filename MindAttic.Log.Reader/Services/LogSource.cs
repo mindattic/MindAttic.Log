@@ -1,13 +1,11 @@
 namespace MindAttic.Log.Reader.Services;
 
-public enum LogSourceKind { Folder, SqliteFile, SqlServer }
-
-/// <summary>What the user picked in the source panel — a folder of rolled
-/// <c>MindAttic.Log.&lt;yyyy-MM&gt;.db</c> files, one SQLite file (an app's own database), or a
-/// SQL Server connection string (resolved via MindAttic.Vault upstream, never typed in plaintext
-/// by the Reader itself — see <see cref="ReaderSettingsStore"/>).</summary>
+/// <summary>One app's standalone <c>MindAttic.Log.db</c> — the only tier left (see
+/// docs/BIBLE.md §1/§4). <see cref="AppId"/> is the folder name under Vault's <c>Logging</c>
+/// bucket (<c>VaultPaths.LoggingDbPath</c>'s first segment); <see cref="Path"/> is the resolved
+/// absolute file path, kept alongside it so a query never has to re-derive it.</summary>
 public sealed class LogSource
 {
-    public required LogSourceKind Kind { get; init; }
+    public required string AppId { get; init; }
     public required string Path { get; init; }
 }

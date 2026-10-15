@@ -4,7 +4,7 @@ project: MindAttic.Log
 code: LOG
 layer: bible
 status: living
-updated: 2026-10-08
+updated: 2026-10-14
 ---
 
 # MindAttic.Log — Project Bible
@@ -14,32 +14,54 @@ updated: 2026-10-08
 ## 1. The one sentence {#LOG-§1}
 MindAttic.Log is the one logging pipeline for every MindAttic app: a strict shared schema
 (`LogEntry`/`MindAttic_Log`) that every app writes through `ILogger<T>` as it already does, landing
-on whichever storage the app already has — a `MindAttic_Log` table on SQL Server, the same table
-inside the app's own SQLite database, or a dedicated rolling SQLite file for apps with no database
-at all — plus a WPF + WebView2 Reader app to browse all three.
+in that app's own standalone `MindAttic.Log.db` SQLite database — one file per app, located via
+`MindAttic.Vault`'s `VaultPaths.LoggingDbPath`, never shared with the app's own SQL Server or SQLite
+store — plus a WPF + WebView2 Reader app that discovers and browses every app's database.
+
+### 1.1 Superseded decision — the three-tier model (2026-10-08 → 2026-10-14) {#LOG-§1.1}
+Through 2026-10-12 this bible described a *deliberate* three-tier model instead: each app's rows
+landed on whichever storage it already had — its own SQL Server database, its own SQLite file, or
+(only for apps with no database at all) a rolled SQLite file in that app's own `%LocalAppData%`.
+That reasoning wasn't wrong for what it optimized for — zero extra moving parts, reuse of
+infrastructure an app already operated — and it shipped correctly to ~10 apps (docs/MIGRATION.md),
+including a live production process (Prose's Hub).
+
+It is superseded, not corrected, by a new requirement: logs living inside an app's own database or
+`%LocalAppData%` folder are exactly as easy for a user to lose as that app's own data — cleared as
+"just cache," dropped with a reinstall, gone if the app's database is restored from an older backup.
+A standalone file under Vault's shared roaming root is harder to lose by accident, and registering
+every app's log location through one place (Vault) means the Reader can discover and list every
+app's logs itself, instead of a human pointing it at a folder/file/connection string by hand. See
+§4 for the resulting architecture and docs/MIGRATION.md for the Phase-2 per-app migration this
+requires.
 
 ## 2. The product promise {#LOG-§2}
-- **One schema, every backend.** `MindAttic.Log/Models/LogEntry.cs` and `MindAttic.Log/Schema/LogSchema.cs` define the exact
-  same columns whether the sink is SQL Server or SQLite. A query written for one tier works on the
-  other with only the table prefix changed.
+- **One schema, one backend.** `MindAttic.Log/Models/LogEntry.cs` and
+  `MindAttic.Log/Schema/LogSchema.cs` define the exact columns every app's database holds — the same
+  shape everywhere, so a query written against one app's `MindAttic.Log.db` works against any other's
+  unchanged.
 - **No call-site change.** Every surveyed app already uses `ILogger<T>` (see docs/MIGRATION.md).
   `services.AddMindAtticLog(...)` wires a Serilog pipeline underneath; apps delete their ad hoc
   writers, not their logging calls.
-- **The "file" tier is still queryable.** A flat text file with no index degrades into noise as it
-  grows (Prose currently regex-parses daily text files just to answer "what errors happened
-  yesterday" — see §4). The no-database tier is a rolled SQLite file, not text: one portable file
-  per period, real indexes, real `WHERE` clauses, zero server.
+- **Still queryable, never a flat file.** A flat text file with no index degrades into noise as it
+  grows (Prose used to regex-parse daily text files just to answer "what errors happened
+  yesterday" — see §4). `MindAttic.Log.db` is a real SQLite database: real indexes, real `WHERE`
+  clauses, zero server.
 - **Live-readable while being written.** The SQLite sink runs in WAL mode specifically so
   MindAttic.Log.Reader can query a file while the app that owns it keeps logging to it.
 - **A write must never take the host app down.** Every sink swallows its own storage failures
   (see `MindAtticSqliteSink.Flush`) rather than letting a full disk or a locked file propagate
   into application code that was just trying to log a warning.
+- **Harder to lose than an app's own data.** The database lives under Vault's shared roaming root
+  (`%APPDATA%\MindAttic\Logging\<appId>\`), not the app's own `%LocalAppData%` — clearing an app's
+  local cache/data folder can never take its logs with it (see §1.1).
 
 ## 3. What it is NOT {#LOG-§3}
 - **NOT a log aggregation server.** No daemon, no ingestion API, no Seq/ELK-style central service.
-  Every app owns its own storage (its SQL Server database, its SQLite file, or its own directory of
-  rolled files); MindAttic.Log.Reader reads those directly, it does not proxy them.
-  Per-app ownership was deliberate — see `docs/MIGRATION.md` for which apps use which tier.
+  Every app still owns its own database file; MindAttic.Log.Reader reads those files directly, it
+  does not proxy them. What changed from the superseded model (§1.1) is *where* that file lives
+  (Vault's shared roaming root, not the app's own data folder) and that it's always the same kind of
+  file (standalone SQLite) — not whether each app still has its own.
 - **NOT a replacement for `ILogger<T>`.** Apps keep calling `ILogger<T>`/`Log.Information(...)`
   exactly as today; this package only supplies the sink underneath.
 - **NOT a triage/issue tracker.** Prose's `LogIssue` table (signature-deduped Open/Resolved/Ignored
@@ -49,9 +71,9 @@ at all — plus a WPF + WebView2 Reader app to browse all three.
 - **NOT a Blazor app.** The Reader is plain WPF + `Microsoft.Web.WebView2` with vanilla HTML/CSS/JS
   in `wwwroot/`, matching Automata.App and KdpPublish. BlazorWebView was considered and rejected —
   those two sibling apps already settled this for the ecosystem.
-- **NOT a credential resolver.** SQL Server connection strings are credentials; this library takes
-  one as a plain string (`MindAtticLogOptions.SqlServerConnectionString`) and never resolves it
-  itself — the host app resolves it through MindAttic.Vault per HOUSE-LAW-3 before calling in.
+- **NOT a Vault client.** `MindAtticLogOptions.DbPath` is a plain string this library takes as-is and
+  never resolves itself — the host app computes it via `MindAttic.Vault.Paths.VaultPaths.LoggingDbPath`
+  before calling `AddMindAtticLog` (LOG-LAW-2). This library has no dependency on `MindAttic.Vault`.
 - **NOT a mandate to erase every other table or file that happens to hold records shaped like
   logs.** "One pipeline" means one pipeline for *general operational/diagnostic logging* — the
   thing `ILogger<T>`/`Log.Information(...)` calls produce. It does not mean folding a
@@ -84,6 +106,12 @@ at all — plus a WPF + WebView2 Reader app to browse all three.
     visible product behavior change (the viewer starts empty after every restart until new entries
     accumulate), not a logging-infrastructure decision, and nothing in this migration had the
     authority or the product context to make that call unilaterally.
+  - **A Phase-2 per-app migration (§1.1) may drop the old `MindAttic_Log` table it just copied —
+    but only with the same per-app explicit confirmation Prose's restart used above, never
+    automatically.** `MindAtticLogMigrator`'s `dropSource` parameter defaults to `false`; a caller
+    opts in per invocation. This is not a reversal of "never alter a live store unilaterally" — it's
+    the same rule applied: the *authority* comes from asking each time, not from the migration code
+    deciding for itself.
 
 ## 4. Architecture canon {#LOG-§4}
 
@@ -106,7 +134,7 @@ gap), `Message`, `MessageTemplate` (new — lets a Reader group by shape, not ex
 `Exception`, `PropertiesJson` (new — keeps the column count fixed regardless of what a call site
 logs), `CorrelationId` (new — cross-call tracing), `MachineName`.
 
-### 4.2 Why the "file" tier is SQLite, not text
+### 4.2 Why SQLite, not text, and why standalone, not shared
 Researched explicitly for this decision (not assumed): SQLite as a queryable, dependency-free log
 store is validated prior art, not a novel idea here —
 [Blacklite](https://tersesystems.com/blog/2020/11/26/queryable-logging-with-blacklite) (a JVM
@@ -114,53 +142,58 @@ diagnostic appender) reports SQL queries beating flat-file parsing and a vacuume
 staying only slightly larger than the equivalent text log;
 [logdive](https://docs.rs/crate/logdive/0.3.1) indexes JSON/logfmt/plain-text logs into local
 SQLite with no daemon; and the general guidance from that research — promote the columns you
-actually filter on (timestamp, level, application, category) into real indexed columns, keep WAL
-on for concurrent readers, roll/retain by file rather than by row — is exactly what
-`MindAttic.Log/Schema/LogSchema.cs`, `MindAttic.Log/Sinks/MindAtticSqliteSink.cs`, and `MindAttic.Log/Sinks/LogFileRoller.cs` do.
+actually filter on (timestamp, level, application, category) into real indexed columns, keep WAL on
+for concurrent readers — is exactly what `MindAttic.Log/Schema/LogSchema.cs` and
+`MindAttic.Log/Sinks/MindAtticSqliteSink.cs` do.
 
-Rolling is monthly (`MindAttic.Log.<yyyy-MM>.db`), not daily like Prose's text files — a queryable
-DB file stays useful well past a day, so daily rotation would just mean the Reader has to open more
-files per query for no benefit. Retention is by file **count** (`RetainedFileCount`, default 12),
-mirroring Prose's `retainedFileCountLimit` idea rather than inventing a different retention model.
+The file is never rolled or replaced (unlike the superseded model's monthly `MindAttic.Log.<yyyy-MM>.db`
+rotation, §1.1) — it's one `MindAttic.Log.db` for the life of the app. Retention is therefore
+row-based: `MindAtticSqliteSink` sweeps rows older than `RetainedDays` (default 365) on its own
+timer and runs `VACUUM` to reclaim the freed space, replacing the old model's file-count pruning.
+
+The location — `%APPDATA%\MindAttic\Logging\<appId>\MindAttic.Log.db`, via
+`MindAttic.Vault.Paths.VaultPaths.LoggingDbPath(appId)` — is deliberately Vault's shared **roaming**
+root, not the app's own `%LocalAppData%`, per §1.1/§2. `Logging` is documented as a Vault bucket
+(`../MindAttic.Vault/docs/BIBLE.md` §9) but is *not* a credential bucket: no `providers.json`, no
+`IConfiguration` projection — just a shared, conventionally-named folder.
 
 ### 4.3 Sink architecture
 ```
                          ILogger<T> (unchanged call sites)
                                     |
                     services.AddMindAtticLog(options)  (ServiceCollectionExtensions)
+                       options.DbPath = VaultPaths.LoggingDbPath(appId)   <- host resolves, not this library
                                     |
                          LoggerConfiguration + Serilog bridge
                                     |
-              +---------------------------------------+
-              |                                        |
-     Destination.SqlServer                     Destination.Sqlite
-              |                                        |
-   MindAtticLogEnricher projects            MindAtticSqliteSink
-   Application/MachineName/                 (batched, WAL, own
-   MessageTemplate/PropertiesJson            CREATE TABLE IF NOT
-   onto the event as properties              EXISTS on construction)
-              |                                        |
-   Serilog.Sinks.MSSqlServer,                 dbo app's .db file, OR
-   AdditionalColumns mapped to        LogFileRoller-computed MindAttic.Log.<yyyy-MM>.db
-   those same property names                  when there's no app database
-              |                                        |
-     dbo.MindAttic_Log (SQL Server)            MindAttic_Log table (SQLite)
-
-                    Both produce identical LogSchema.Columns rows.
+                            MindAtticSqliteSink
+                    (batched writes + WAL + its own row-based
+                     retention timer; CREATE TABLE IF NOT EXISTS
+                     on construction)
+                                    |
+                 %APPDATA%\MindAttic\Logging\<appId>\MindAttic.Log.db
 ```
 
-`LogSchema.CreateTableSqlServer` is run once by the host (migration/startup step) — the SQL Server
-sink never auto-creates the table, so the two backends can never silently drift from `LogSchema`.
-The SQLite sink does create its own table on construction (`CREATE TABLE IF NOT EXISTS`) since a
-rolled file or a fresh app database won't have one yet and there is no separate migration step for
-file-based apps to run.
+`MindAttic_Log` is created by the sink itself (`CREATE TABLE IF NOT EXISTS`) on construction — there
+is no separate migration/startup step, since every app's database is this library's own file, never
+shared with anything else.
 
-### 4.4 Reader architecture
+### 4.4 Migrating existing historical data
+Apps already migrated onto the superseded three-tier model (docs/MIGRATION.md) have real
+`MindAttic_Log` history sitting in a SQL Server table or inside their own app-owned SQLite file.
+`MindAttic.Log/Migration/MindAtticLogMigrator.cs` is the one-shot tool each app's own Phase-2 pass
+runs once: `MigrateFromSqlServerAsync`/`MigrateFromSqliteAsync` copy that app's rows into its new
+standalone `MindAttic.Log.db` (idempotent by a per-`Application` `TimestampUtc` watermark, so a
+re-run after a partial failure doesn't duplicate rows), and optionally drop the source table —
+gated behind an explicit `dropSource: true` the caller must pass per invocation (see §3's confirmed
+exception). This never runs automatically; see docs/MIGRATION.md for the per-app rollout.
+
+### 4.5 Reader architecture
 MindAttic.Log.Reader is a single-pane WPF `Microsoft.Web.WebView2` host (no AutoWebNav — that
 package drives/records a *third-party* page under automation, which a read-only log viewer never
-does). `LogQueryService` is the only thing that touches storage: it opens SQLite connections
-**read-only**, and for a folder source it skips any rolled file whose embedded `yyyy-MM` cannot
-overlap the requested date range rather than opening every file present. `MainWindow` is the
+does). `LogQueryService` is the only thing that touches storage: `DiscoverApps()` lists every
+subfolder of Vault's `Logging` bucket that has a `MindAttic.Log.db` (driving the app switcher in
+`wwwroot/`), and `QueryAsync` opens a chosen app's database **read-only**. `MainWindow` is the
 JS↔C# bridge (`WebMessageReceived` in, `ExecuteScriptAsync` out), exactly the pattern Automata.App
 and KdpPublish already use.
 
@@ -183,27 +216,31 @@ sinks. A need for an app-specific field is a conversation about extending `LogSc
 everyone (see `PropertiesJson` for the escape hatch that exists precisely so this law doesn't get
 broken under pressure), not a local fork of the table.
 
-### {#LOG-LAW-2} This library resolves no credentials.
-`MindAtticLogOptions.SqlServerConnectionString` is a plain string the host supplies; `MindAttic.Log`
-never reads `%APPDATA%`, Key Vault, or any other secret source itself. The host resolves it through
-MindAttic.Vault before calling `AddMindAtticLog`. (`MindAttic.Log/MindAtticLogOptions.cs`.)
+### {#LOG-LAW-2} This library resolves no Vault locations itself.
+`MindAtticLogOptions.DbPath` is a plain string the host supplies; `MindAttic.Log` never reads
+`%APPDATA%`, Key Vault, or any other config/secret source itself, and has no package dependency on
+`MindAttic.Vault`. The host computes `DbPath` via `VaultPaths.LoggingDbPath(appId)` before calling
+`AddMindAtticLog`. (`MindAttic.Log/MindAtticLogOptions.cs`.) `MindAtticLogMigrator`'s source
+connection info follows the same rule: the caller already has it, the migrator never resolves it.
 
 ### {#LOG-LAW-3} A logging failure never becomes an application failure.
 Every sink catches and swallows its own storage-layer exceptions (`SqliteException` in
-`MindAtticSqliteSink.Flush`); a full disk, a locked file, or an unreachable SQL Server must never
-throw out of an `ILogger.LogInformation(...)` call site. (`MindAttic.Log/Sinks/MindAtticSqliteSink.cs`.)
+`MindAtticSqliteSink.Flush` and `.PruneOldRows`); a full disk or a locked file must never throw out
+of an `ILogger.LogInformation(...)` call site. (`MindAttic.Log/Sinks/MindAtticSqliteSink.cs`.)
 
 ### {#LOG-LAW-4} The Reader never writes.
 `MindAttic.Log.Reader` opens SQLite connections in `SqliteOpenMode.ReadOnly` and issues `SELECT`
-only, on both backends. It is a viewer, not a second writer that could race the app's own sink.
+only. It is a viewer, not a second writer that could race the app's own sink.
 (`MindAttic.Log.Reader/Services/LogQueryService.cs`.)
 
 ## 6. Glossary {#LOG-§6}
-- **Tier** — which of the three backends an app's `MindAtticLogOptions.Destination` targets:
-  SQL Server, SQLite (app-owned `.db`), or SQLite (no-database, rolled file).
-- **Wire schema** — the column set in `MindAttic.Log/Schema/LogSchema.cs`, identical across both backends.
-- **Rolled file** — a `MindAttic.Log.<yyyy-MM>.db` produced by `LogFileRoller` for the
-  no-database tier.
-- **Sink** — the Serilog `ILogEventSink` (or `Serilog.Sinks.MSSqlServer` configuration) that
-  actually persists a `LogEntry` row.
-- **Reader** — `MindAttic.Log.Reader`, the WPF + WebView2 viewer.
+- **Standalone database** — an app's one `MindAttic.Log.db`, the only tier (see §1.1 for the
+  superseded SQL Server / app-owned-SQLite / rolled-file model).
+- **Wire schema** — the column set in `MindAttic.Log/Schema/LogSchema.cs`.
+- **`Logging` bucket** — the Vault roaming-root folder (`%APPDATA%\MindAttic\Logging\`) every app's
+  standalone database lives under, one subfolder per app id; see `VaultPaths.LoggingDbPath`.
+- **Sink** — `MindAtticSqliteSink`, the Serilog `ILogEventSink` that persists a `LogEntry` row.
+- **Migrator** — `MindAtticLogMigrator`, the one-shot Phase-2 tool that copies an app's historical
+  rows out of the superseded tiers (see §4.4, docs/MIGRATION.md).
+- **Reader** — `MindAttic.Log.Reader`, the WPF + WebView2 viewer; discovers apps via the `Logging`
+  bucket instead of a manual folder/file/connection-string picker.

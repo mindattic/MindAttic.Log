@@ -60,4 +60,41 @@ public class MindAtticSqliteSinkTests
         using (new MindAtticSqliteSink(dbPath, application: "MindAttic.Log.Tests")) { }
         Assert.That(File.Exists(dbPath), Is.True);
     }
+
+    [Test]
+    public void PruneOldRows_Deletes_Rows_Older_Than_RetainedDays_But_Keeps_Newer_Ones()
+    {
+        using var sink = new MindAtticSqliteSink(dbPath, application: "MindAttic.Log.Tests", retainedDays: 30);
+
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString()))
+        {
+            connection.Open();
+            InsertRow(connection, DateTime.UtcNow.AddDays(-60), "too old");
+            InsertRow(connection, DateTime.UtcNow.AddDays(-1), "recent");
+        }
+
+        sink.PruneOldRows();
+
+        using var verify = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString());
+        verify.Open();
+        using var command = verify.CreateCommand();
+        command.CommandText = $"SELECT Message FROM {LogSchema.TableName};";
+        using var reader = command.ExecuteReader();
+        var messages = new List<string>();
+        while (reader.Read()) messages.Add(reader.GetString(0));
+
+        Assert.That(messages, Is.EqualTo(new[] { "recent" }));
+    }
+
+    private static void InsertRow(SqliteConnection connection, DateTime timestampUtc, string message)
+    {
+        using var insert = connection.CreateCommand();
+        insert.CommandText = $"""
+            INSERT INTO {LogSchema.TableName} (TimestampUtc, Level, Application, Message)
+            VALUES ($timestampUtc, 2, 'MindAttic.Log.Tests', $message);
+            """;
+        insert.Parameters.AddWithValue("$timestampUtc", timestampUtc.ToString("o"));
+        insert.Parameters.AddWithValue("$message", message);
+        insert.ExecuteNonQuery();
+    }
 }

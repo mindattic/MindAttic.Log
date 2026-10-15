@@ -33,8 +33,7 @@ public class ServiceCollectionExtensionsTests
         services.AddMindAtticLog(o =>
         {
             o.Application = "MindAttic.Log.Tests";
-            o.Destination = LogDestination.Sqlite;
-            o.SqlitePath = dbPath;
+            o.DbPath = dbPath;
         });
 
         using var provider = services.BuildServiceProvider();

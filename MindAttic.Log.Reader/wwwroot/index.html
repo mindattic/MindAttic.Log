@@ -8,11 +8,12 @@
 <body>
 <header id="toolbar">
   <div class="source-group">
-    <button id="btnBrowseFolder" title="Choose a folder of rolled MindAttic.Log.*.db files">Open folder…</button>
-    <button id="btnBrowseFile" title="Choose a single app-owned SQLite database">Open .db file…</button>
-    <input id="sqlServerInput" type="text" placeholder="SQL Server connection string…" />
-    <button id="btnConnectSqlServer">Connect</button>
-    <span id="sourceLabel" class="source-label">No source selected</span>
+    <label>App
+      <select id="appSelect">
+        <option value="">(no apps found under %APPDATA%\MindAttic\Logging)</option>
+      </select>
+    </label>
+    <span id="sourceLabel" class="source-label">No app selected</span>
   </div>
 </header>
 

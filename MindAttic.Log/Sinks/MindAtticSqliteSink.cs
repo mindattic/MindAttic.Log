@@ -8,15 +8,16 @@ using Serilog.Events;
 namespace MindAttic.Log.Sinks;
 
 /// <summary>
-/// Writes log events into a SQLite file using the shared <see cref="LogSchema"/>. Used for both
-/// MindAttic.Log tiers that land on SQLite: an app's own database file (point <c>DbPath</c> at it
-/// — the sink only ever touches its own table) and the no-database tier (point it at a rolled
-/// <c>MindAttic.Log.&lt;yyyy-MM&gt;.db</c> file via <see cref="LogFileRoller"/>).
+/// Writes log events into an app's standalone <c>MindAttic.Log.db</c> using the shared
+/// <see cref="LogSchema"/> — the one remaining tier (see docs/BIBLE.md §4); the path is resolved by
+/// the host via <c>VaultPaths.LoggingDbPath</c>, never computed by this sink itself.
 /// <para>
 /// Batches on a background timer rather than one transaction per event — validated by prior art
 /// (Blacklite/logdive: see docs/BIBLE.md §4) as the difference between SQLite keeping up with
 /// write-heavy logging and falling behind it. WAL mode is turned on so the Log Reader can query
-/// the file concurrently while the app keeps writing.
+/// the file concurrently while the app keeps writing. A second timer sweeps rows older than
+/// <c>retainedDays</c> (see <see cref="PruneOldRows"/>) — the file is never rolled or replaced, so
+/// row-based retention is what keeps it bounded.
 /// </para>
 /// </summary>
 public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
@@ -24,15 +25,19 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
     private readonly string connectionString;
     private readonly string application;
     private readonly string machineName;
+    private readonly int retainedDays;
     private readonly ConcurrentQueue<LogEvent> pending = new();
     private readonly Timer flushTimer;
+    private readonly Timer? retentionTimer;
     private readonly int batchSize;
     private int pendingCount;
 
-    public MindAtticSqliteSink(string dbPath, string application, int batchSize = 200, TimeSpan? flushInterval = null)
+    public MindAtticSqliteSink(string dbPath, string application, int batchSize = 200,
+        TimeSpan? flushInterval = null, int retainedDays = 365, TimeSpan? retentionInterval = null)
     {
         this.application = application;
         this.batchSize = batchSize;
+        this.retainedDays = retainedDays;
         machineName = Environment.MachineName;
 
         var directory = Path.GetDirectoryName(dbPath);
@@ -51,6 +56,11 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
         }
 
         flushTimer = new Timer(_ => Flush(), null, flushInterval ?? TimeSpan.FromSeconds(2), flushInterval ?? TimeSpan.FromSeconds(2));
+        if (retainedDays > 0)
+        {
+            var interval = retentionInterval ?? TimeSpan.FromHours(24);
+            retentionTimer = new Timer(_ => PruneOldRows(), null, interval, interval);
+        }
     }
 
     public void Emit(LogEvent logEvent)
@@ -150,9 +160,44 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
         return extra.Count == 0 ? null : JsonSerializer.Serialize(extra);
     }
 
+    /// <summary>
+    /// Row-based retention — replaces the old no-database tier's file-count rolling now that every
+    /// app writes one standalone, never-rolled <c>MindAttic.Log.db</c> (see docs/BIBLE.md §4):
+    /// delete rows older than <see cref="retainedDays"/> and reclaim the freed space. Runs on its
+    /// own timer, independent of the flush batch, and never throws (LOG-LAW-3) — a full disk or a
+    /// locked file here must not take the host app down any more than a failed write would.
+    /// Internal (not private) so tests can invoke it deterministically instead of racing the timer.
+    /// </summary>
+    internal void PruneOldRows()
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-retainedDays).ToString("o");
+            using var connection = new SqliteConnection(connectionString);
+            connection.Open();
+            using (var delete = connection.CreateCommand())
+            {
+                delete.CommandText = $"DELETE FROM {LogSchema.TableName} WHERE TimestampUtc < $cutoff;";
+                var cutoffParam = delete.CreateParameter();
+                cutoffParam.ParameterName = "$cutoff";
+                cutoffParam.Value = cutoff;
+                delete.Parameters.Add(cutoffParam);
+                delete.ExecuteNonQuery();
+            }
+            using var vacuum = connection.CreateCommand();
+            vacuum.CommandText = "VACUUM;";
+            vacuum.ExecuteNonQuery();
+        }
+        catch (Exception)
+        {
+            // Best-effort housekeeping, same discipline as Flush() above — see LOG-LAW-3.
+        }
+    }
+
     public void Dispose()
     {
         flushTimer.Dispose();
+        retentionTimer?.Dispose();
         Flush();
     }
 }

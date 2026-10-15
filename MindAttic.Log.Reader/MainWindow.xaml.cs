@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Win32;
 using MindAttic.Log.Reader.Services;
 
 namespace MindAttic.Log.Reader;
@@ -63,15 +62,12 @@ public partial class MainWindow : Window
             switch (action)
             {
                 case "ready":
+                    await PostAsync("onApps", queryService.DiscoverApps());
                     await PostAsync("onSettings", settingsStore.Load());
                     break;
 
-                case "browseFolder":
-                    await HandleBrowseFolderAsync();
-                    break;
-
-                case "browseFile":
-                    await HandleBrowseFileAsync();
+                case "selectApp":
+                    await HandleSelectAppAsync(msg!);
                     break;
 
                 case "query":
@@ -88,43 +84,23 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task HandleBrowseFolderAsync()
+    private Task HandleSelectAppAsync(JsonNode msg)
     {
-        var dialog = new OpenFolderDialog { Title = "Choose a folder of MindAttic.Log.*.db files" };
-        if (dialog.ShowDialog(this) != true) return;
-
+        var appId = msg["appId"]!.GetValue<string>();
         var settings = settingsStore.Load();
-        settings.LastFolderPath = dialog.FolderName;
-        settings.LastSourceKind = nameof(LogSourceKind.Folder);
+        settings.LastAppId = appId;
         settingsStore.Save(settings);
-
-        await PostAsync("onSourceChosen", new { kind = "folder", path = dialog.FolderName });
-    }
-
-    private async Task HandleBrowseFileAsync()
-    {
-        var dialog = new OpenFileDialog { Title = "Choose a MindAttic.Log SQLite database", Filter = "SQLite database (*.db)|*.db|All files (*.*)|*.*" };
-        if (dialog.ShowDialog(this) != true) return;
-
-        var settings = settingsStore.Load();
-        settings.LastSqliteFilePath = dialog.FileName;
-        settings.LastSourceKind = nameof(LogSourceKind.SqliteFile);
-        settingsStore.Save(settings);
-
-        await PostAsync("onSourceChosen", new { kind = "sqliteFile", path = dialog.FileName });
+        return Task.CompletedTask;
     }
 
     private async Task HandleQueryAsync(JsonNode msg)
     {
         var sourceNode = msg["source"] ?? throw new InvalidOperationException("Missing 'source'.");
-        var kind = sourceNode["kind"]!.GetValue<string>() switch
+        var source = new LogSource
         {
-            "folder" => LogSourceKind.Folder,
-            "sqliteFile" => LogSourceKind.SqliteFile,
-            "sqlServer" => LogSourceKind.SqlServer,
-            var other => throw new InvalidOperationException($"Unknown source kind '{other}'."),
+            AppId = sourceNode["appId"]!.GetValue<string>(),
+            Path = sourceNode["path"]!.GetValue<string>(),
         };
-        var source = new LogSource { Kind = kind, Path = sourceNode["path"]!.GetValue<string>() };
         // BUG FIX: JsonNode.Deserialize<T>() throws on a null receiver rather than returning null,
         // so the "?? new LogFilter()" fallback below never actually ran for a missing "filter" key
         // — it looked defensive but wasn't. Caught by the outer try/catch either way (surfaced as

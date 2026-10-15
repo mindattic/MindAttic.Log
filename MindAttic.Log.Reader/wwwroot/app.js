@@ -5,15 +5,39 @@
 
   const LEVEL_NAMES = ["Verbose", "Debug", "Information", "Warning", "Error", "Fatal"];
 
-  let currentSource = null; // { kind: "folder"|"sqliteFile"|"sqlServer", path: string }
+  let apps = []; // [{ appId, path }], from onApps — one entry per Vault Logging\<appId>\MindAttic.Log.db
+  let currentSource = null; // { appId, path }
 
   function post(action, payload) {
     window.chrome.webview.postMessage(Object.assign({ action }, payload || {}));
   }
 
-  function setSource(kind, path) {
-    currentSource = { kind, path };
-    document.getElementById("sourceLabel").textContent = `${kind}: ${path}`;
+  function selectApp(appId, { query = true } = {}) {
+    const app = apps.find((a) => a.appId === appId);
+    if (!app) return;
+    currentSource = app;
+    document.getElementById("appSelect").value = appId;
+    document.getElementById("sourceLabel").textContent = app.path;
+    post("selectApp", { appId });
+    if (query) runQuery();
+  }
+
+  function renderAppOptions() {
+    const select = document.getElementById("appSelect");
+    select.innerHTML = "";
+    if (apps.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "(no apps found under %APPDATA%\\MindAttic\\Logging)";
+      select.appendChild(option);
+      return;
+    }
+    for (const app of apps) {
+      const option = document.createElement("option");
+      option.value = app.appId;
+      option.textContent = app.appId;
+      select.appendChild(option);
+    }
   }
 
   function collectFilter() {
@@ -35,7 +59,7 @@
 
   function runQuery() {
     if (!currentSource) {
-      document.getElementById("statusLabel").textContent = "Choose a source first.";
+      document.getElementById("statusLabel").textContent = "Choose an app first.";
       return;
     }
     document.getElementById("statusLabel").textContent = "Querying…";
@@ -72,21 +96,20 @@
   }
 
   window.mindAtticLogReader = {
-    onSettings(settings) {
-      if (settings.lastSourceKind === "Folder" && settings.lastFolderPath) setSource("folder", settings.lastFolderPath);
-      else if (settings.lastSourceKind === "SqliteFile" && settings.lastSqliteFilePath) setSource("sqliteFile", settings.lastSqliteFilePath);
+    // MainWindow.OnMessage("ready") always posts onApps before onSettings (two awaited
+    // PostAsync calls in that order), so `apps` is already populated by the time this runs.
+    onApps(discovered) {
+      apps = discovered;
+      renderAppOptions();
     },
-    onSourceChosen(src) { setSource(src.kind, src.path); },
+    onSettings(settings) {
+      if (settings.lastAppId && apps.some((a) => a.appId === settings.lastAppId)) selectApp(settings.lastAppId, { query: false });
+    },
     onResults(entries) { renderRows(entries); },
     onError(err) { document.getElementById("statusLabel").textContent = `Error: ${err.message}`; },
   };
 
-  document.getElementById("btnBrowseFolder").addEventListener("click", () => post("browseFolder"));
-  document.getElementById("btnBrowseFile").addEventListener("click", () => post("browseFile"));
-  document.getElementById("btnConnectSqlServer").addEventListener("click", () => {
-    const connectionString = document.getElementById("sqlServerInput").value.trim();
-    if (connectionString) setSource("sqlServer", connectionString);
-  });
+  document.getElementById("appSelect").addEventListener("change", (e) => selectApp(e.target.value));
   document.getElementById("btnQuery").addEventListener("click", runQuery);
   document.getElementById("btnCloseDetail").addEventListener("click", () => document.getElementById("detailPane").classList.add("hidden"));
 

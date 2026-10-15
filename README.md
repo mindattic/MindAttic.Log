@@ -1,20 +1,22 @@
 # MindAttic.Log
 
-One strict logging schema for every MindAttic app, written to whatever storage the app already has: a `MindAttic_Log` table on SQL Server, a `MindAttic_Log` table in the app's own SQLite database, or a dedicated rolling SQLite file when the app has no database at all.
+One strict logging schema for every MindAttic app, written to one standalone `MindAttic.Log.db` SQLite database per app, stored under MindAttic.Vault's shared roaming root rather than any one app's own data folder.
 
-[![.NET](https://img.shields.io/badge/.NET-9.0%20and%2010.0-512BD4)](MindAttic.Log/MindAttic.Log.csproj) [![C#](https://img.shields.io/badge/language-C%23-239120)](MindAttic.Log) [![Version](https://img.shields.io/badge/version-1.0.0-blue)](MindAttic.Log/MindAttic.Log.csproj) [![Tests](https://img.shields.io/badge/tests-NUnit%204-brightgreen)](MindAttic.Log.Tests) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-9.0%20and%2010.0-512BD4)](MindAttic.Log/MindAttic.Log.csproj) [![C#](https://img.shields.io/badge/language-C%23-239120)](MindAttic.Log) [![Version](https://img.shields.io/badge/version-3.0.0-blue)](MindAttic.Log/MindAttic.Log.csproj) [![Tests](https://img.shields.io/badge/tests-NUnit-brightgreen)](MindAttic.Log.Tests) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## Why
 
-Across the MindAttic ecosystem (see `docs/MIGRATION.md`), most apps already call `ILogger<T>` at their call sites but have no durable sink underneath — output goes nowhere, or to ad hoc `Console.Write*`/hand-rolled file writers that nobody can filter or query. The one app with a real logging pipeline, Prose, writes daily Serilog text files that get parsed back with regex to answer even simple questions ("what errors happened last Tuesday"). MindAttic.Log replaces all of that with one package: apps keep calling `ILogger<T>`, and this library becomes the sink.
+Across the MindAttic ecosystem (see `docs/MIGRATION.md`), most apps already call `ILogger<T>` at their call sites but have no durable sink underneath — output goes nowhere, or to ad hoc `Console.Write*`/hand-rolled file writers that nobody can filter or query. MindAttic.Log replaces all of that with one package: apps keep calling `ILogger<T>`, and this library becomes the sink.
 
-A flat text file is also a dead end for anything but `tail`/`grep` — there's no index, and "one giant monolithic log" degrades as it grows. Prior art (Blacklite, logdive — see `docs/BIBLE.md` §4) found that an embedded SQLite file beats parsing flat text for queryability while staying what a "log file" is supposed to be: one portable file, no server. So the "file" tier in MindAttic.Log *is* SQLite — rolled monthly, same idea as Prose's daily rotation — not plain text.
+A flat text file is also a dead end for anything but `tail`/`grep` — there's no index, and "one giant monolithic log" degrades as it grows. Prior art (Blacklite, logdive — see `docs/BIBLE.md` §4) found that an embedded SQLite file beats parsing flat text for queryability while staying what a "log file" is supposed to be: one portable file, no server.
+
+Every app gets its own standalone `MindAttic.Log.db`, full stop — no sharing an app's SQL Server database or its own SQLite file, and no per-app location choice. The file lives at `%APPDATA%\MindAttic\Logging\<appId>\MindAttic.Log.db` (resolved via `MindAttic.Vault`'s `VaultPaths.LoggingDbPath`), deliberately under Vault's shared **roaming** root rather than the app's own `%LocalAppData%` — so clearing an app's local cache/data folder can never take its logs with it. Retention is row-based (delete-then-`VACUUM` on a schedule), not file-rolling, since the file is never replaced.
 
 ## What's in this repo
 
-- **`MindAttic.Log`** — the shared library. `LogEntry`/`LogSeverity` (the wire schema), `LogSchema` (the DDL, identical columns on both backends), a custom batched `ILogEventSink` for SQLite (WAL mode, so a Reader can query live), `Serilog.Sinks.MSSqlServer` wiring for the SQL Server tier, and `services.AddMindAtticLog(...)` to wire it all into DI.
-- **`MindAttic.Log.Reader`** — a WPF + WebView2 desktop viewer (same shape as Automata.App/KdpPublish, not Blazor) for browsing logs across all three tiers: open a folder of rolled SQLite files, open a single app's `.db`, or connect to a SQL Server table. Filters by date range, level, application, category, and message text.
-- **`docs/BIBLE.md`** — architecture canon: why this schema, why SQLite for the file tier, the laws.
+- **`MindAttic.Log`** — the shared library. `LogEntry`/`LogSeverity` (the wire schema), `LogSchema` (the DDL), a custom batched `ILogEventSink` for SQLite (WAL mode, so a Reader can query live, plus a row-based retention sweep), `services.AddMindAtticLog(...)` to wire it into DI, and `MindAtticLogMigrator` — a one-shot, explicitly-invoked tool for copying an app's historical rows out of the retired SQL Server/app-owned-SQLite tiers (see `docs/MIGRATION.md`).
+- **`MindAttic.Log.Reader`** — a WPF + WebView2 desktop viewer (same shape as Automata.App/KdpPublish, not Blazor) that discovers every app's standalone database under Vault's `Logging` bucket and lets you switch between them. Filters by date range, level, application, category, and message text.
+- **`docs/BIBLE.md`** — architecture canon: why this schema, why SQLite, the laws.
 - **`docs/MIGRATION.md`** — tracks which MindAttic apps have been audited and migrated.
 
 ## Using it
@@ -23,21 +25,11 @@ A flat text file is also a dead end for anything but `tail`/`grep` — there's n
 services.AddMindAtticLog(o =>
 {
     o.Application = "MindAttic.Launcher";
-    o.Destination = LogDestination.Sqlite;
-    o.FileDirectory = VaultPaths.AppData("MindAttic.Launcher", "logs"); // no database → rolled file tier
+    o.DbPath = VaultPaths.LoggingDbPath("MindAttic.Launcher"); // resolved via MindAttic.Vault
 });
 ```
 
-```csharp
-services.AddMindAtticLog(o =>
-{
-    o.Application = "MindAttic.Ideas";
-    o.Destination = LogDestination.SqlServer;
-    o.SqlServerConnectionString = connectionString; // resolved via MindAttic.Vault upstream
-});
-```
-
-Either way, application code is unchanged: inject `ILogger<T>` and call it as usual.
+Application code is unchanged: inject `ILogger<T>` and call it as usual.
 
 ## Building
 

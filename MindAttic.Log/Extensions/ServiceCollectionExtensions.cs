@@ -13,7 +13,7 @@ namespace MindAttic.Log.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// <c>services.AddMindAtticLog(o =&gt; { o.Application = "MindAttic.Launcher"; o.Destination = LogDestination.Sqlite; o.FileDirectory = ...; });</c>
+    /// <c>services.AddMindAtticLog(o =&gt; { o.Application = "MindAttic.Launcher"; o.DbPath = VaultPaths.LoggingDbPath("MindAttic.Launcher"); });</c>
     /// </summary>
     public static IServiceCollection AddMindAtticLog(this IServiceCollection services, Action<MindAtticLogOptions> configure)
     {
