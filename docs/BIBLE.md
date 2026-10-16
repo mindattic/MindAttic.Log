@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Log
-code: LOG
+code: M.LOGS
 layer: bible
 status: living
 updated: 2026-10-14
@@ -11,14 +11,14 @@ updated: 2026-10-14
 > Single source of truth for what MindAttic.Log IS, is NOT, and the rules that keep it coherent.
 > README.md says how to build/consume the package; this says how to think about the system.
 
-## 1. The one sentence {#LOG-§1}
+## 1. The one sentence {#M.LOGS-§1}
 MindAttic.Log is the one logging pipeline for every MindAttic app: a strict shared schema
 (`LogEntry`/`MindAttic_Log`) that every app writes through `ILogger<T>` as it already does, landing
 in that app's own standalone `MindAttic.Log.db` SQLite database — one file per app, located via
 `MindAttic.Vault`'s `VaultPaths.LoggingDbPath`, never shared with the app's own SQL Server or SQLite
 store — plus a WPF + WebView2 Reader app that discovers and browses every app's database.
 
-### 1.1 Superseded decision — the three-tier model (2026-10-08 → 2026-10-14) {#LOG-§1.1}
+### 1.1 Superseded decision — the three-tier model (2026-10-08 → 2026-10-14) {#M.LOGS-§1.1}
 Through 2026-10-12 this bible described a *deliberate* three-tier model instead: each app's rows
 landed on whichever storage it already had — its own SQL Server database, its own SQLite file, or
 (only for apps with no database at all) a rolled SQLite file in that app's own `%LocalAppData%`.
@@ -35,7 +35,7 @@ app's logs itself, instead of a human pointing it at a folder/file/connection st
 §4 for the resulting architecture and docs/MIGRATION.md for the Phase-2 per-app migration this
 requires.
 
-## 2. The product promise {#LOG-§2}
+## 2. The product promise {#M.LOGS-§2}
 - **One schema, one backend.** `MindAttic.Log/Models/LogEntry.cs` and
   `MindAttic.Log/Schema/LogSchema.cs` define the exact columns every app's database holds — the same
   shape everywhere, so a query written against one app's `MindAttic.Log.db` works against any other's
@@ -56,7 +56,7 @@ requires.
   (`%APPDATA%\MindAttic\Logging\<appId>\`), not the app's own `%LocalAppData%` — clearing an app's
   local cache/data folder can never take its logs with it (see §1.1).
 
-## 3. What it is NOT {#LOG-§3}
+## 3. What it is NOT {#M.LOGS-§3}
 - **NOT a log aggregation server.** No daemon, no ingestion API, no Seq/ELK-style central service.
   Every app still owns its own database file; MindAttic.Log.Reader reads those files directly, it
   does not proxy them. What changed from the superseded model (§1.1) is *where* that file lives
@@ -73,7 +73,7 @@ requires.
   those two sibling apps already settled this for the ecosystem.
 - **NOT a Vault client.** `MindAtticLogOptions.DbPath` is a plain string this library takes as-is and
   never resolves itself — the host app computes it via `MindAttic.Vault.Paths.VaultPaths.LoggingDbPath`
-  before calling `AddMindAtticLog` (LOG-LAW-2). This library has no dependency on `MindAttic.Vault`.
+  before calling `AddMindAtticLog` (M.LOGS-LAW-2). This library has no dependency on `MindAttic.Vault`.
 - **NOT a mandate to erase every other table or file that happens to hold records shaped like
   logs.** "One pipeline" means one pipeline for *general operational/diagnostic logging* — the
   thing `ILogger<T>`/`Log.Information(...)` calls produce. It does not mean folding a
@@ -113,7 +113,7 @@ requires.
     the same rule applied: the *authority* comes from asking each time, not from the migration code
     deciding for itself.
 
-## 4. Architecture canon {#LOG-§4}
+## 4. Architecture canon {#M.LOGS-§4}
 
 ### 4.1 Why this schema
 Derived from auditing Prose's actual logging (not a guess at "industry best practice" — see the
@@ -197,12 +197,12 @@ subfolder of Vault's `Logging` bucket that has a `MindAttic.Log.db` (driving the
 JS↔C# bridge (`WebMessageReceived` in, `ExecuteScriptAsync` out), exactly the pattern Automata.App
 and KdpPublish already use.
 
-## 5. The Laws {#LOG-§5}
+## 5. The Laws {#M.LOGS-§5}
 This project **inherits** the org-wide laws in
 [`MindAttic.HouseRules.md`](../../MindAttic.HouseRules.md) by reference. Directly load-bearing:
 - [HOUSE-LAW-1](../../MindAttic.HouseRules.md#HOUSE-LAW-1) — whole-number versioning.
 - [HOUSE-LAW-3](../../MindAttic.HouseRules.md#HOUSE-LAW-3) — credentials resolve through
-  MindAttic.Vault; see [LOG-LAW-2](#LOG-LAW-2).
+  MindAttic.Vault; see [M.LOGS-LAW-2](#M.LOGS-LAW-2).
 - [HOUSE-LAW-6](../../MindAttic.HouseRules.md#HOUSE-LAW-6) — one engine, many front doors (every
   destination goes through the same `AddMindAtticLog`/`WriteToMindAtticLog` path).
 - [HOUSE-LAW-8](../../MindAttic.HouseRules.md#HOUSE-LAW-8) — done is verified, not asserted.
@@ -210,30 +210,30 @@ This project **inherits** the org-wide laws in
 
 Project-specific laws:
 
-### {#LOG-LAW-1} One schema, no per-app drift.
+### {#M.LOGS-LAW-1} One schema, no per-app drift.
 No consumer app adds its own columns to `MindAttic_Log` or writes to it outside this library's
 sinks. A need for an app-specific field is a conversation about extending `LogSchema` for
 everyone (see `PropertiesJson` for the escape hatch that exists precisely so this law doesn't get
 broken under pressure), not a local fork of the table.
 
-### {#LOG-LAW-2} This library resolves no Vault locations itself.
+### {#M.LOGS-LAW-2} This library resolves no Vault locations itself.
 `MindAtticLogOptions.DbPath` is a plain string the host supplies; `MindAttic.Log` never reads
 `%APPDATA%`, Key Vault, or any other config/secret source itself, and has no package dependency on
 `MindAttic.Vault`. The host computes `DbPath` via `VaultPaths.LoggingDbPath(appId)` before calling
 `AddMindAtticLog`. (`MindAttic.Log/MindAtticLogOptions.cs`.) `MindAtticLogMigrator`'s source
 connection info follows the same rule: the caller already has it, the migrator never resolves it.
 
-### {#LOG-LAW-3} A logging failure never becomes an application failure.
+### {#M.LOGS-LAW-3} A logging failure never becomes an application failure.
 Every sink catches and swallows its own storage-layer exceptions (`SqliteException` in
 `MindAtticSqliteSink.Flush` and `.PruneOldRows`); a full disk or a locked file must never throw out
 of an `ILogger.LogInformation(...)` call site. (`MindAttic.Log/Sinks/MindAtticSqliteSink.cs`.)
 
-### {#LOG-LAW-4} The Reader never writes.
+### {#M.LOGS-LAW-4} The Reader never writes.
 `MindAttic.Log.Reader` opens SQLite connections in `SqliteOpenMode.ReadOnly` and issues `SELECT`
 only. It is a viewer, not a second writer that could race the app's own sink.
 (`MindAttic.Log.Reader/Services/LogQueryService.cs`.)
 
-## 6. Glossary {#LOG-§6}
+## 6. Glossary {#M.LOGS-§6}
 - **Standalone database** — an app's one `MindAttic.Log.db`, the only tier (see §1.1 for the
   superseded SQL Server / app-owned-SQLite / rolled-file model).
 - **Wire schema** — the column set in `MindAttic.Log/Schema/LogSchema.cs`.

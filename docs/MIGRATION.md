@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Log
-code: LOG
+code: M.LOGS
 layer: migration
 status: living
 updated: 2026-10-14
@@ -43,16 +43,16 @@ Server table or an app-owned SQLite file) is exactly what Phase 2 retires.
   the **Phase 2** column below is done until that app's own pass runs.
 - **n/a reasoning** — every n/a row was a deliberate decision, not a skip. Forcing a sink onto a
   stateless library or a pure-TUI tool invents a log where none of the app's real behavior calls
-  for one — see LOG-LAW-1 (no per-app drift) and the "ecosystem pattern" note below. n/a rows have
+  for one — see M.LOGS-LAW-1 (no per-app drift) and the "ecosystem pattern" note below. n/a rows have
   no `MindAttic_Log` data to migrate, so Phase 2 is n/a for them too.
 
 ## Status
 
 | Project | Stack | DB backend | Tier (Phase 1, historical) | What was found / done | Status | Phase 2 |
 |---|---|---|---|---|---|---|
-| **MindAttic.Ideas** | .NET Blazor | SQL Server (`CmsDbContext` — genuine general-purpose content DB: Sites, Pages, Media, Settings, Workflows, plus MindAttic.Authentication's identity tables mixed in) | SqlServer | `AddIdeasCore` calls `AddMindAtticLog` pointed at the same connection string `CmsDbContext` uses; table created once at startup (dev-only) via `LogSchema.CreateTableSqlServer`. **First live proof of the SQL Server tier** — caught and fixed a real bug (LOG-US-D1): `Level.StoreAsEnum` defaulted to storing level as text, which didn't fit the `TINYINT` column. Almost no prior `ILogger<T>` usage existed to extract (one call site) — this mainly establishes the pipeline going forward. Full suite: 586/586. | ✅ | ⬜ |
+| **MindAttic.Ideas** | .NET Blazor | SQL Server (`CmsDbContext` — genuine general-purpose content DB: Sites, Pages, Media, Settings, Workflows, plus MindAttic.Authentication's identity tables mixed in) | SqlServer | `AddIdeasCore` calls `AddMindAtticLog` pointed at the same connection string `CmsDbContext` uses; table created once at startup (dev-only) via `LogSchema.CreateTableSqlServer`. **First live proof of the SQL Server tier** — caught and fixed a real bug (M.LOGS-US-D1): `Level.StoreAsEnum` defaulted to storing level as text, which didn't fit the `TINYINT` column. Almost no prior `ILogger<T>` usage existed to extract (one call site) — this mainly establishes the pipeline going forward. Full suite: 586/586. | ✅ | ⬜ |
 | **Tutor** | .NET Blazor | SQL Server, but auth-only (`TutorAuthDbContext` is MindAttic.Authentication's identity schema; "course content and per-user progress stay JSON" per its own doc comment) — general logging is a no-database problem here | Sqlite (rolled file) | Had its own hand-rolled `Log`/`LogStore` facade (`Log.Info`/`Warn`/`Error`/`Critical`), persisted by `LogStorageService` as a single `app-logs.json` **rewritten whole on every save** — the exact monolithic-file anti-pattern this repo's design rejected. `MindAtticLogBridge` forwards `LogStore.EntryAdded` into the rolled-SQLite tier, zero call-site changes, existing JSON persistence and live in-app viewer left untouched. Full suite: 456/456 (+2 new). | ✅ | ⬜ |
-| **Automata** | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites unchanged. This run caught the original `services.AddSerilog(...)` vs `services.AddLogging(...)` bug (LOG-US-C1). Full suite: 571/571 (+1 new). | ✅ | ⬜ |
+| **Automata** | .NET + Node tools | SQLite (`AutomataDb`, EF Core) | Sqlite (app-owned) | `AddAutomataCore` calls `AddMindAtticLog` pointed at `AutomataDatabase.ResolvePath()` — same file EF owns. `ILogger<T>` call sites unchanged. This run caught the original `services.AddSerilog(...)` vs `services.AddLogging(...)` bug (M.LOGS-US-C1). Full suite: 571/571 (+1 new). | ✅ | ⬜ |
 | **MindAttic.Mobile** | .NET (ASP.NET Core minimal API) | none | Sqlite (rolled file) | WebSocket + xterm.js terminal bridge, single-file app, no database, no test project. Wired `AddMindAtticLog` (rolled-file tier); converted the two startup `Console.WriteLine` calls to `app.Logger`, threaded `ILogger` into `TerminalSession` for its one real error path (Claude API call failures). No test project exists, so verified **live**: ran the built exe, confirmed real log lines landed in the rolled `.db` file. | ✅ | ⬜ |
 | **Formicarium** | .NET Blazor Server (Dashboard) + separate firmware | SQL Server (`FormicariumDbContext` — genuine general-purpose DB: Samples, RiserSamples, BuildProgress; no auth tables mixed in) | SqlServer | `ColonyMonitor`/`TelemetryStore` already used `ILogger<T>`. Wired `AddMindAtticLog` (SQL Server tier) in `Program.cs`, table created at startup next to the existing EF migration. No Dashboard test project exists — verified **live** against the real dev LocalDB: app started cleanly, **20 real rows landed in `dbo.MindAttic_Log`**. Added a repo-local `nuget.config` (none existed). | ✅ | ⬜ |
 | **MediaButler** | .NET CLI (Spectre.Console) + WPF (BlazorWebView) | none | Sqlite (rolled file) | No prior diagnostic logging in either front door — the WPF app had **zero crash visibility** before this (no `DispatcherUnhandledException`/`AppDomain.UnhandledException` handlers at all). Added `CrashLog` (rolled-file tier) wired into both front doors' now-new unhandled-exception handling. A pre-existing NDJSON `AuditLog` (file-mutation records: op/kind/from/to) was correctly left untouched — a narrowly-scoped business record, not a candidate for folding into `MindAttic_Log` (same reasoning as `AuthAuditLog`). Full suite: 298/298 (+1 new). | ✅ | ⬜ |

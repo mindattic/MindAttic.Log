@@ -96,10 +96,10 @@ function Invoke-Digest {
     if (-not (Test-Path -LiteralPath $BiblePath)) { throw "BIBLE.md not found at $BiblePath" }
     $bible = Get-DocText $BiblePath
 
-    $one   = Get-BibleSection $bible ('LOG-' + $SECT + '1')
-    $isnot = Get-BibleSection $bible ('LOG-' + $SECT + '3')
-    $laws  = Get-BibleSection $bible ('LOG-' + $SECT + '5')
-    $gloss = Get-BibleSection $bible ('LOG-' + $SECT + '9')
+    $one   = Get-BibleSection $bible ('M.LOGS-' + $SECT + '1')
+    $isnot = Get-BibleSection $bible ('M.LOGS-' + $SECT + '3')
+    $laws  = Get-BibleSection $bible ('M.LOGS-' + $SECT + '5')
+    $gloss = Get-BibleSection $bible ('M.LOGS-' + $SECT + '9')
 
     # status index: count the status markers across the stories file.
     # NB: PowerShell variable names are case-insensitive, so these locals MUST NOT collide
@@ -113,16 +113,16 @@ function Invoke-Digest {
         $nCut     = ([regex]::Matches($s, [regex]::Escape($CUT))).Count
     }
 
-    # pending decision heads ("## LOG-A.." headings in AMENDMENTS.md; normally none)
+    # pending decision heads ("## M.LOGS-A.." headings in AMENDMENTS.md; normally none)
     $pending = @()
     if (Test-Path -LiteralPath $AmendPath) {
         $a = Get-DocText $AmendPath
-        $am = [regex]::Matches($a, '(?m)^##\s+(LOG-A\d+[^\n]*)$')
+        $am = [regex]::Matches($a, '(?m)^##\s+(M\.LOGS-A\d+[^\n]*)$')
         foreach ($m in $am) { $pending += ('- ' + $m.Groups[1].Value.Trim()) }
     }
 
     $today = (Get-Date).ToString('yyyy-MM-dd')
-    $genFrom = 'LOG-' + $SECT + '1,LOG-' + $SECT + '3,LOG-' + $SECT + '5,LOG-' + $SECT + '9'
+    $genFrom = 'M.LOGS-' + $SECT + '1,M.LOGS-' + $SECT + '3,M.LOGS-' + $SECT + '5,M.LOGS-' + $SECT + '9'
     $statusLine = "- done: $nDone | partial: $nPartial | planned: $nPlanned"
     $emDash = [char]0x2014
 
@@ -130,7 +130,7 @@ function Invoke-Digest {
         '---'
         'codex: 1'
         'project: MindAttic.Log'
-        'code: LOG'
+        'code: M.LOGS'
         'layer: digest'
         'status: generated'
         "generatedFrom: $genFrom"
@@ -262,7 +262,7 @@ function Invoke-Doctor {
             $parts = Get-ChildItem -LiteralPath $tdir -Filter '*.cs' -File -Recurse | ForEach-Object { Get-DocText $_.FullName }
             $testBlob = ($parts -join "`n")
         }
-        $storyBlocks = [regex]::Matches($stext, '(?ms)^- \*\*(LOG-US-[A-Za-z0-9]+)\s*' + [regex]::Escape($CHECK) + '.*?(?=^- \*\*LOG-US-|^\#\#|\Z)')
+        $storyBlocks = [regex]::Matches($stext, '(?ms)^- \*\*(M\.LOGS-US-[A-Za-z0-9]+)\s*' + [regex]::Escape($CHECK) + '.*?(?=^- \*\*M\.LOGS-US-|^\#\#|\Z)')
         $missing = New-Object System.Collections.Generic.List[string]
         $confirmed = 0
         foreach ($b in $storyBlocks) {

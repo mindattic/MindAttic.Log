@@ -8,7 +8,7 @@ namespace MindAttic.Log.Migration;
 /// One-shot, host-invoked copy of historical <c>MindAttic_Log</c> rows out of the retired SQL
 /// Server / app-owned-SQLite tiers and into an app's new standalone <c>MindAttic.Log.db</c> (see
 /// docs/MIGRATION.md "Phase 2"). Never runs automatically and never resolves its own source
-/// connection info (LOG-LAW-2) — the caller already has it, since it's what <c>AddMindAtticLog</c>
+/// connection info (M.LOGS-LAW-2) — the caller already has it, since it's what <c>AddMindAtticLog</c>
 /// used to be pointed at before that app's Phase-2 pass.
 /// <para>
 /// Idempotent by watermark: re-running after a partial failure only copies rows newer than the

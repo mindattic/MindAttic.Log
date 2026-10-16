@@ -1,7 +1,7 @@
 ---
 codex: 1
 project: MindAttic.Log
-code: LOG
+code: M.LOGS
 layer: amendments
 status: living
 updated: 2026-10-08
@@ -10,7 +10,7 @@ updated: 2026-10-08
 # MindAttic.Log — Pending decisions
 > Decisions not yet folded into docs/BIBLE.md. Normally empty: fold each into the bible and delete it.
 
-- SQL Server connection-string resolution for `MindAttic.Log.Reader` (LOG-US-E3) still takes a
+- SQL Server connection-string resolution for `MindAttic.Log.Reader` (M.LOGS-US-E3) still takes a
   raw string typed into the session; whether it should resolve named credentials through
   MindAttic.Vault's broker store, or something simpler (a recent-connections list with Windows
   Credential Manager), isn't decided yet.

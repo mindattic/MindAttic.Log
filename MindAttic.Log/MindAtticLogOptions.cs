@@ -13,7 +13,7 @@ public sealed class MindAtticLogOptions
     /// Required. Full path to this app's standalone <c>MindAttic.Log.db</c>. The host computes this
     /// via <c>MindAttic.Vault.Paths.VaultPaths.LoggingDbPath(Application)</c> and passes the resolved
     /// absolute path in — the same arm's-length pattern every other Vault-resolved value in this
-    /// library follows (see LOG-LAW-2 in docs/BIBLE.md): the host resolves through Vault, this
+    /// library follows (see M.LOGS-LAW-2 in docs/BIBLE.md): the host resolves through Vault, this
     /// library never touches <c>%APPDATA%</c> itself.
     /// </summary>
     public string? DbPath { get; set; }

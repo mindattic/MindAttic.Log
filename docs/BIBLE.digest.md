@@ -1,11 +1,11 @@
 ---
 codex: 1
 project: MindAttic.Log
-code: LOG
+code: M.LOGS
 layer: digest
 status: generated
-generatedFrom: LOG-§1,LOG-§3,LOG-§5,LOG-§9
-updated: 2026-10-15
+generatedFrom: M.LOGS-§1,M.LOGS-§3,M.LOGS-§5,M.LOGS-§9
+updated: 2026-10-16
 ---
 
 # MindAttic.Log — BIBLE digest
@@ -18,7 +18,7 @@ in that app's own standalone `MindAttic.Log.db` SQLite database — one file per
 `MindAttic.Vault`'s `VaultPaths.LoggingDbPath`, never shared with the app's own SQL Server or SQLite
 store — plus a WPF + WebView2 Reader app that discovers and browses every app's database.
 
-### 1.1 Superseded decision — the three-tier model (2026-10-08 → 2026-10-14) {#LOG-§1.1}
+### 1.1 Superseded decision — the three-tier model (2026-10-08 → 2026-10-14) {#M.LOGS-§1.1}
 Through 2026-10-12 this bible described a *deliberate* three-tier model instead: each app's rows
 landed on whichever storage it already had — its own SQL Server database, its own SQLite file, or
 (only for apps with no database at all) a rolled SQLite file in that app's own `%LocalAppData%`.
@@ -52,7 +52,7 @@ requires.
   those two sibling apps already settled this for the ecosystem.
 - **NOT a Vault client.** `MindAtticLogOptions.DbPath` is a plain string this library takes as-is and
   never resolves itself — the host app computes it via `MindAttic.Vault.Paths.VaultPaths.LoggingDbPath`
-  before calling `AddMindAtticLog` (LOG-LAW-2). This library has no dependency on `MindAttic.Vault`.
+  before calling `AddMindAtticLog` (M.LOGS-LAW-2). This library has no dependency on `MindAttic.Vault`.
 - **NOT a mandate to erase every other table or file that happens to hold records shaped like
   logs.** "One pipeline" means one pipeline for *general operational/diagnostic logging* — the
   thing `ILogger<T>`/`Log.Information(...)` calls produce. It does not mean folding a
@@ -97,7 +97,7 @@ This project **inherits** the org-wide laws in
 [`MindAttic.HouseRules.md`](../../MindAttic.HouseRules.md) by reference. Directly load-bearing:
 - [HOUSE-LAW-1](../../MindAttic.HouseRules.md#HOUSE-LAW-1) — whole-number versioning.
 - [HOUSE-LAW-3](../../MindAttic.HouseRules.md#HOUSE-LAW-3) — credentials resolve through
-  MindAttic.Vault; see [LOG-LAW-2](#LOG-LAW-2).
+  MindAttic.Vault; see [M.LOGS-LAW-2](#M.LOGS-LAW-2).
 - [HOUSE-LAW-6](../../MindAttic.HouseRules.md#HOUSE-LAW-6) — one engine, many front doors (every
   destination goes through the same `AddMindAtticLog`/`WriteToMindAtticLog` path).
 - [HOUSE-LAW-8](../../MindAttic.HouseRules.md#HOUSE-LAW-8) — done is verified, not asserted.
@@ -105,25 +105,25 @@ This project **inherits** the org-wide laws in
 
 Project-specific laws:
 
-### {#LOG-LAW-1} One schema, no per-app drift.
+### {#M.LOGS-LAW-1} One schema, no per-app drift.
 No consumer app adds its own columns to `MindAttic_Log` or writes to it outside this library's
 sinks. A need for an app-specific field is a conversation about extending `LogSchema` for
 everyone (see `PropertiesJson` for the escape hatch that exists precisely so this law doesn't get
 broken under pressure), not a local fork of the table.
 
-### {#LOG-LAW-2} This library resolves no Vault locations itself.
+### {#M.LOGS-LAW-2} This library resolves no Vault locations itself.
 `MindAtticLogOptions.DbPath` is a plain string the host supplies; `MindAttic.Log` never reads
 `%APPDATA%`, Key Vault, or any other config/secret source itself, and has no package dependency on
 `MindAttic.Vault`. The host computes `DbPath` via `VaultPaths.LoggingDbPath(appId)` before calling
 `AddMindAtticLog`. (`MindAttic.Log/MindAtticLogOptions.cs`.) `MindAtticLogMigrator`'s source
 connection info follows the same rule: the caller already has it, the migrator never resolves it.
 
-### {#LOG-LAW-3} A logging failure never becomes an application failure.
+### {#M.LOGS-LAW-3} A logging failure never becomes an application failure.
 Every sink catches and swallows its own storage-layer exceptions (`SqliteException` in
 `MindAtticSqliteSink.Flush` and `.PruneOldRows`); a full disk or a locked file must never throw out
 of an `ILogger.LogInformation(...)` call site. (`MindAttic.Log/Sinks/MindAtticSqliteSink.cs`.)
 
-### {#LOG-LAW-4} The Reader never writes.
+### {#M.LOGS-LAW-4} The Reader never writes.
 `MindAttic.Log.Reader` opens SQLite connections in `SqliteOpenMode.ReadOnly` and issues `SELECT`
 only. It is a viewer, not a second writer that could race the app's own sink.
 (`MindAttic.Log.Reader/Services/LogQueryService.cs`.)

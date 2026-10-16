@@ -126,7 +126,7 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
             }
             catch (Exception)
             {
-                // A log write must never take the host app down (LOG-LAW-3) — this runs on a bare
+                // A log write must never take the host app down (M.LOGS-LAW-3) — this runs on a bare
                 // System.Threading.Timer callback with no other safety net, so an uncaught
                 // exception here (not just SqliteException: a full disk can surface as IOException,
                 // a locked file as UnauthorizedAccessException) would otherwise crash the whole
@@ -164,7 +164,7 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
     /// Row-based retention — replaces the old no-database tier's file-count rolling now that every
     /// app writes one standalone, never-rolled <c>MindAttic.Log.db</c> (see docs/BIBLE.md §4):
     /// delete rows older than <see cref="retainedDays"/> and reclaim the freed space. Runs on its
-    /// own timer, independent of the flush batch, and never throws (LOG-LAW-3) — a full disk or a
+    /// own timer, independent of the flush batch, and never throws (M.LOGS-LAW-3) — a full disk or a
     /// locked file here must not take the host app down any more than a failed write would.
     /// Internal (not private) so tests can invoke it deterministically instead of racing the timer.
     /// </summary>
@@ -190,7 +190,7 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
         }
         catch (Exception)
         {
-            // Best-effort housekeeping, same discipline as Flush() above — see LOG-LAW-3.
+            // Best-effort housekeeping, same discipline as Flush() above — see M.LOGS-LAW-3.
         }
     }
 
