@@ -43,27 +43,30 @@ public sealed class LogQueryService
         }.ToString();
 
         await using var connection = new SqliteConnection(connectionString);
-        try { await connection.OpenAsync(cancel); }
+        try
+        {
+            await connection.OpenAsync(cancel);
+
+            var (where, parameters) = BuildWhere(filter);
+            var sql = $"""
+                SELECT Id, TimestampUtc, Level, Application, Category, Message, MessageTemplate, Exception, PropertiesJson, CorrelationId, MachineName
+                FROM {LogSchema.TableName}
+                {where}
+                ORDER BY TimestampUtc DESC
+                LIMIT $maxResults;
+                """;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
+            command.Parameters.AddWithValue("$maxResults", filter.MaxResults);
+
+            var results = new List<LogEntry>();
+            await using var reader = await command.ExecuteReaderAsync(cancel);
+            while (await reader.ReadAsync(cancel)) results.Add(ReadEntry(reader));
+            return results;
+        }
         catch (SqliteException) { return []; } // e.g. not a MindAttic.Log database — skip quietly
-
-        var (where, parameters) = BuildWhere(filter);
-        var sql = $"""
-            SELECT Id, TimestampUtc, Level, Application, Category, Message, MessageTemplate, Exception, PropertiesJson, CorrelationId, MachineName
-            FROM {LogSchema.TableName}
-            {where}
-            ORDER BY TimestampUtc DESC
-            LIMIT $maxResults;
-            """;
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
-        command.Parameters.AddWithValue("$maxResults", filter.MaxResults);
-
-        var results = new List<LogEntry>();
-        await using var reader = await command.ExecuteReaderAsync(cancel);
-        while (await reader.ReadAsync(cancel)) results.Add(ReadEntry(reader));
-        return results;
     }
 
     private static (string Where, List<(string Name, object Value)> Parameters) BuildWhere(LogFilter filter)
