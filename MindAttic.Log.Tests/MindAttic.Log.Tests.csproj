@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MindAttic.Log\MindAttic.Log.csproj" />
+    <ProjectReference Include="..\MindAttic.Log.Reader\MindAttic.Log.Reader.csproj" />
   </ItemGroup>
 
 </Project>
