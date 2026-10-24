@@ -11,3 +11,4 @@ TestResults/
 .claude/quicksave.md
 artifacts/
 .prose/
+.agent/
