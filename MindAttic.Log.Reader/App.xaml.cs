@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using MindAttic.Log.Reader.Services;
 using MindAttic.Vault.Configuration;
 using MindAttic.Vault.DependencyInjection;
+using MindAttic.Vault.Settings.Manifest;
 
 namespace MindAttic.Log.Reader;
 
@@ -16,6 +17,12 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        if (SettingsManifestCommand.TryRun<ReaderSettings>(e.Args))
+        {
+            Shutdown();
+            return;
+        }
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mindattic-log-reader-error.log");
         DispatcherUnhandledException += (_, ex) =>
@@ -33,12 +40,13 @@ public partial class App : Application
             .ConfigureAppConfiguration((_, cfg) => cfg.AddMindAtticVaultFiles())
             .ConfigureServices((ctx, services) => services
                 .AddMindAtticVault(ctx.Configuration)
-                .AddVaultAppSettings<ReaderSettings>("MindAttic.Log.Reader")
+                .AddVaultAppSettings<ReaderSettings>(ReaderSettings.AppId)
                 .AddSingleton<ReaderSettingsStore>()
                 .AddSingleton<LogQueryService>())
             .Build();
 
         Services = host.Services;
+        Services.GetRequiredService<ReaderSettingsStore>().LoadOrSeed();
         new MainWindow().Show();
     }
 }
