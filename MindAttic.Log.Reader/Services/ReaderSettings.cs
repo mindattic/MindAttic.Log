@@ -3,7 +3,7 @@ using MindAttic.Vault.Settings.Manifest;
 namespace MindAttic.Log.Reader.Services;
 
 /// <summary>Roaming at <c>%APPDATA%\MindAttic\MindAttic.Log.Reader\settings.json</c>; edited in MindAttic.Vault.Desktop.</summary>
-[SettingsApp(AppId, "Log Reader", Icon = "log", Description = "Viewer for every MindAttic app's log database.")]
+[SettingsApp(AppId, "MindAttic.Log", Icon = "log", Description = "Viewer for every MindAttic app's log database.")]
 public sealed class ReaderSettings
 {
     public const string AppId = "MindAttic.Log.Reader";
