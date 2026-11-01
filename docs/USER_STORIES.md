@@ -193,4 +193,5 @@ updated: 2026-10-14
 | M.LOGS-T18 | 2026-10-23 | docs | closed | many billions of tokens | — |
 | M.LOGS-T19 | 2026-10-24 | docs | closed | Update USER_STORIES.md | — |
 | M.LOGS-T20 | 2026-10-31 | feature | closed | LAMP: move MindAttic.Log Reader's app-level settings and keys to MindAttic.Vault.Desktop (manifest, LoadOrSeed, shared named keys, cog opens Vault) | 2ac9862 LampReaderSettingsTests (46/46) |
-| M.LOGS-T21 | 2026-10-31 | chore | open | Vault tab named after the repo: 'Log Reader' -> 'MindAttic.Log' | M.VALT-T78 |
+| M.LOGS-T21 | 2026-10-31 | chore | closed | Vault tab named after the repo: 'Log Reader' -> 'MindAttic.Log' | M.VALT-T78 4c63e13 |
+| M.LOGS-T22 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
