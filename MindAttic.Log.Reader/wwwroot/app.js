@@ -104,6 +104,12 @@
     },
     onSettings(settings) {
       if (settings.lastAppId && apps.some((a) => a.appId === settings.lastAppId)) selectApp(settings.lastAppId, { query: false });
+      else if (apps.length > 0) {
+        // The dropdown already shows apps[0], and re-picking the shown option fires no "change",
+        // so without this a lone app (or a first run) could never be selected or queried.
+        currentSource = apps[0];
+        document.getElementById("sourceLabel").textContent = apps[0].path;
+      }
     },
     onResults(entries) { renderRows(entries); },
     onError(err) { document.getElementById("statusLabel").textContent = `Error: ${err.message}`; },

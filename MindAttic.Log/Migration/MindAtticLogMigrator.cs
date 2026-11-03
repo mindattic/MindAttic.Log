@@ -12,7 +12,7 @@ namespace MindAttic.Log.Migration;
 /// used to be pointed at before that app's Phase-2 pass.
 /// <para>
 /// Idempotent by watermark: re-running after a partial failure only copies rows newer than the
-/// newest <c>TimestampUtc</c> already present in the destination for that <c>Application</c>,
+/// newest <c>TimestampUtc</c> already copied into the destination for that <c>Application</c>,
 /// rather than re-inserting everything. This is a one-shot historical copy, not an ongoing sync —
 /// rows that happen to share the exact watermark timestamp are not re-copied, which is an
 /// acceptable gap for a never-repeated migration, not a general dedup guarantee.
@@ -37,7 +37,7 @@ public static class MindAtticLogMigrator
         if (!await SqlServerTableExistsAsync(source, cancel)) return 0;
 
         var application = await ReadApplicationAsync(source, cancel);
-        var watermark = ReadDestinationWatermark(destDbPath, application);
+        var watermark = ReadDestinationWatermark(destDbPath, application, await ReadSourceMaxTimestampAsync(source, cancel));
 
         await using var select = source.CreateCommand();
         select.CommandText = $"""
@@ -96,7 +96,7 @@ public static class MindAtticLogMigrator
         if (!await SqliteTableExistsAsync(source, cancel)) return 0;
 
         var application = await ReadApplicationAsync(source, cancel);
-        var watermark = ReadDestinationWatermark(destDbPath, application);
+        var watermark = ReadDestinationWatermark(destDbPath, application, await ReadSourceMaxTimestampAsync(source, cancel));
 
         await using var select = source.CreateCommand();
         select.CommandText = $"""
@@ -170,21 +170,42 @@ public static class MindAtticLogMigrator
         }
     }
 
-    private static DateTime ReadDestinationWatermark(string destDbPath, string? application)
+    /// <summary>Newest source <c>TimestampUtc</c>, in the same ISO-8601 text form <see cref="BindRow"/>
+    /// writes into the destination, or null for an empty source.</summary>
+    private static async Task<string?> ReadSourceMaxTimestampAsync(System.Data.Common.DbConnection source, CancellationToken cancel)
     {
-        if (application is null || !File.Exists(destDbPath)) return DateTime.MinValue;
+        await using var command = source.CreateCommand();
+        command.CommandText = source is SqliteConnection
+            ? $"SELECT MAX(TimestampUtc) FROM {LogSchema.TableName};"
+            : $"SELECT MAX(TimestampUtc) FROM dbo.{LogSchema.TableName};";
+        var result = await command.ExecuteScalarAsync(cancel);
+        return result is null or DBNull ? null : ToIsoUtc(result);
+    }
+
+    /// <summary>The watermark only counts destination rows no newer than the source's own newest
+    /// row: the destination is the app's live <c>MindAttic.Log.db</c>, so once its sink has logged
+    /// anything (startup lines, or a whole session between a failed first run and the re-run) an
+    /// uncapped MAX would sit past every historical row, copy nothing, and let <c>dropSource</c>
+    /// drop rows that were never copied.</summary>
+    private static DateTime ReadDestinationWatermark(string destDbPath, string? application, string? sourceMax)
+    {
+        if (application is null || sourceMax is null || !File.Exists(destDbPath)) return DateTime.MinValue;
 
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = destDbPath }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT MAX(TimestampUtc) FROM {LogSchema.TableName} WHERE Application = $application;";
+        command.CommandText = $"SELECT MAX(TimestampUtc) FROM {LogSchema.TableName} WHERE Application = $application AND TimestampUtc <= $sourceMax;";
         var applicationParam = command.CreateParameter();
         applicationParam.ParameterName = "$application";
         applicationParam.Value = application;
         command.Parameters.Add(applicationParam);
+        var sourceMaxParam = command.CreateParameter();
+        sourceMaxParam.ParameterName = "$sourceMax";
+        sourceMaxParam.Value = sourceMax;
+        command.Parameters.Add(sourceMaxParam);
 
         var result = command.ExecuteScalar();
-        return result is string s ? DateTime.Parse(s, null,
+        return result is string s ? DateTime.Parse(s, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal)
             : DateTime.MinValue;
     }

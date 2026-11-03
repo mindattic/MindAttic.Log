@@ -88,7 +88,7 @@ public sealed class LogQueryService
     private static LogEntry ReadEntry(System.Data.Common.DbDataReader reader) => new()
     {
         Id = reader.GetInt64(0),
-        TimestampUtc = DateTime.Parse(reader.GetString(1), null,
+        TimestampUtc = DateTime.Parse(reader.GetString(1), System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal),
         Level = (LogSeverity)reader.GetInt32(2),
         Application = reader.GetString(3),
