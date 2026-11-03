@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace MindAttic.Log.Extensions;
 
@@ -32,9 +33,31 @@ public static class ServiceCollectionExtensions
         // (on IServiceCollection, outside of an ILoggingBuilder) registers the Serilog bridge but
         // leaves ILogger<T> unresolvable — caught by Automata's integration test, see
         // docs/MIGRATION.md.
-        services.AddLogging(builder => builder.AddSerilog(logger, dispose: true));
+        services.AddLogging(builder =>
+        {
+            builder.AddSerilog(logger, dispose: true);
+
+            // AddLogging's default filter is Information, so without this a Debug/Verbose
+            // MinimumLevel would never reach the sink through ILogger<T>. The rule is scoped to the
+            // Serilog provider only (SetMinimumLevel would lower every other provider too), and is
+            // added only below Information: at Information and above Serilog's own MinimumLevel
+            // already filters, and a provider rule would override the host's category rules.
+            if (options.MinimumLevel < Models.LogSeverity.Information)
+                builder.AddFilter<SerilogLoggerProvider>(null, ToMsLevel(options.MinimumLevel));
+        });
         return services;
     }
+
+    private static LogLevel ToMsLevel(Models.LogSeverity severity) => severity switch
+    {
+        Models.LogSeverity.Verbose => LogLevel.Trace,
+        Models.LogSeverity.Debug => LogLevel.Debug,
+        Models.LogSeverity.Information => LogLevel.Information,
+        Models.LogSeverity.Warning => LogLevel.Warning,
+        Models.LogSeverity.Error => LogLevel.Error,
+        Models.LogSeverity.Fatal => LogLevel.Critical,
+        _ => LogLevel.Information,
+    };
 
     private static Serilog.Events.LogEventLevel ToSerilogLevel(Models.LogSeverity severity) => severity switch
     {
