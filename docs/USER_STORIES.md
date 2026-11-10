@@ -195,3 +195,7 @@ updated: 2026-10-14
 | M.LOGS-T20 | 2026-10-31 | feature | closed | LAMP: move MindAttic.Log Reader's app-level settings and keys to MindAttic.Vault.Desktop (manifest, LoadOrSeed, shared named keys, cog opens Vault) | 2ac9862 LampReaderSettingsTests (46/46) |
 | M.LOGS-T21 | 2026-10-31 | chore | closed | Vault tab named after the repo: 'Log Reader' -> 'MindAttic.Log' | M.VALT-T78 4c63e13 |
 | M.LOGS-T22 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
+| M.LOGS-T23 | 2026-11-02 | docs | open | Adopt MindAttic.Agency docs-site pipeline, publish README to GitHub Pages (HOUSE-LAW-14) | — |
+| M.LOGS-T24 | 2026-11-02 | fix | closed | Bughunt sweep, two passes: find and fix real bugs across tracked source (user request 2026-11-02) | — |
+| M.LOGS-T25 | 2026-11-02 | fix | closed | Fix the open item the 2026-11-02 bughunt left for decision (Debug/Verbose reach the Serilog sink) | — |
+| M.LOGS-T26 | 2026-11-10 | chore | closed | Crash recovery: commit the command-catalog sync (.agent/commands/*.md) and regenerated docs/USER_STORIES.md left uncommitted by the session crash | — |
