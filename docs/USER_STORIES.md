@@ -201,3 +201,8 @@ updated: 2026-10-14
 | M.LOGS-T26 | 2026-11-10 | chore | closed | Crash recovery: commit the command-catalog sync (.agent/commands/*.md) and regenerated docs/USER_STORIES.md left uncommitted by the session crash | — |
 | M.LOGS-T27 | 2026-11-10 | chore | closed | Adopt the shared docs-site pipeline: turn on GitHub Pages | — |
 | M.LOGS-T28 | 2026-11-17 | docs | closed | Update USER_STORIES.md | — |
+| M.LOGS-T29 | 2026-11-22 | feature | open | Add ILogStore/provider registry abstraction in MindAttic.Log and move the existing SQLite sink (MindAtticSqliteSink, LoggerConfigurationExtensions) behind it, SQLite staying the default | — |
+| M.LOGS-T30 | 2026-11-22 | feature | open | Add a SQL Server log store (dedicated MindAttic.Log database on localhost/MSSQLSERVER) chosen per app by a connection string in configuration | — |
+| M.LOGS-T31 | 2026-11-22 | feature | open | Make the Reader (LogQueryService, LogSource) discover and query every app's logs through the store abstraction, across SQLite files and configured SQL Server databases | — |
+| M.LOGS-T32 | 2026-11-22 | feature | open | Add a migrator that copies an app's SQLite MindAttic.Log.db into the SQL Server store | — |
+| M.LOGS-T33 | 2026-11-22 | docs | closed | 2026-11-22 morning | — |
