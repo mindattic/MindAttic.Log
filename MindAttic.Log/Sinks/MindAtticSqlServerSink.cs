@@ -39,9 +39,7 @@ public sealed class MindAtticSqlServerSink : ILogEventSink, IDisposable
     public MindAtticSqlServerSink(string connectionString, string application, int batchSize = 200,
         TimeSpan? flushInterval = null, int retainedDays = 365, TimeSpan? retentionInterval = null)
     {
-        var builder = new SqlConnectionStringBuilder(connectionString);
-        if (string.IsNullOrWhiteSpace(builder.InitialCatalog)) builder.InitialCatalog = DefaultDatabase;
-        this.connectionString = builder.ConnectionString;
+        this.connectionString = WithDefaultDatabase(connectionString);
         this.application = application;
         this.batchSize = batchSize;
         this.retainedDays = retainedDays;
@@ -66,7 +64,22 @@ public sealed class MindAtticSqlServerSink : ILogEventSink, IDisposable
     internal void EnsureSchema()
     {
         if (schemaReady) return;
+        CreateSchema(connectionString);
+        schemaReady = true;
+    }
 
+    /// <summary>The connection string with <see cref="DefaultDatabase"/> filled in when it names no
+    /// database.</summary>
+    internal static string WithDefaultDatabase(string connectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        if (string.IsNullOrWhiteSpace(builder.InitialCatalog)) builder.InitialCatalog = DefaultDatabase;
+        return builder.ConnectionString;
+    }
+
+    /// <summary>Creates the connection string's database and its table when either is missing.</summary>
+    internal static void CreateSchema(string connectionString)
+    {
         var builder = new SqlConnectionStringBuilder(connectionString);
         var database = builder.InitialCatalog;
         builder.InitialCatalog = "master";
@@ -84,7 +97,6 @@ public sealed class MindAtticSqlServerSink : ILogEventSink, IDisposable
         using var table = connection.CreateCommand();
         table.CommandText = LogSchema.CreateTableSqlServer;
         table.ExecuteNonQuery();
-        schemaReady = true;
     }
 
     private void Flush()

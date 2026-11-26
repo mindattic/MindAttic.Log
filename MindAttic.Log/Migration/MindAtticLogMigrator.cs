@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Data.SqlClient;
 using MindAttic.Log.Schema;
+using MindAttic.Log.Sinks;
 
 namespace MindAttic.Log.Migration;
 
@@ -133,6 +134,166 @@ public static class MindAtticLogMigrator
 
         return copied;
     }
+
+    /// <summary>
+    /// Copies an app's standalone <c>MindAttic.Log.db</c> into the SQL Server store's shared database
+    /// (M.LOGS-T32), for an app moving onto <see cref="Stores.SqlServerLogStore"/>. The connection string
+    /// is the one the app's <see cref="MindAtticLogOptions.ConnectionString"/> holds; one that names no
+    /// database gets <see cref="MindAtticSqlServerSink.DefaultDatabase"/>, and the database and table are
+    /// created when missing, as the sink does.
+    /// <para>
+    /// The source file is only read: opened read-only, never written to and never dropped. Rows keep
+    /// their own <c>Application</c>, so other apps' rows in the shared database are untouched.
+    /// </para>
+    /// <para>
+    /// Idempotent by a per-<c>Application</c> watermark, as the other migrations are: only source rows
+    /// newer than the newest destination row (capped at that app's newest source row, so whatever the
+    /// app has logged to SQL Server since switching doesn't hide its history) are copied. Rows commit in
+    /// batches of <paramref name="batchSize"/>, so a re-run after a failure resumes from the last
+    /// committed batch; rows sharing the watermark's exact millisecond are the same accepted gap as above.
+    /// </para>
+    /// </summary>
+    public static async Task<int> MigrateSqliteToSqlServerAsync(
+        string sourceDbPath, string destConnectionString, int batchSize = 1000, CancellationToken cancel = default)
+    {
+        if (batchSize < 1) throw new ArgumentOutOfRangeException(nameof(batchSize));
+        if (!File.Exists(sourceDbPath)) return 0;
+
+        await using var source = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = sourceDbPath,
+            Mode = SqliteOpenMode.ReadOnly,
+        }.ToString());
+        await source.OpenAsync(cancel);
+        if (!await SqliteTableExistsAsync(source, cancel)) return 0;
+
+        var applications = new List<(string Application, DateTime SourceMax)>();
+        await using (var list = source.CreateCommand())
+        {
+            list.CommandText = $"SELECT Application, MAX(TimestampUtc) FROM {LogSchema.TableName} GROUP BY Application;";
+            await using var rows = await list.ExecuteReaderAsync(cancel);
+            while (await rows.ReadAsync(cancel))
+                applications.Add((rows.GetString(0), ToSqlServerMilliseconds(rows.GetString(1))));
+        }
+        if (applications.Count == 0) return 0;
+
+        var connectionString = MindAtticSqlServerSink.WithDefaultDatabase(destConnectionString);
+        MindAtticSqlServerSink.CreateSchema(connectionString);
+        await using var dest = new SqlConnection(connectionString);
+        await dest.OpenAsync(cancel);
+
+        var copied = 0;
+        foreach (var (application, sourceMax) in applications)
+        {
+            var watermark = await ReadSqlServerWatermarkAsync(dest, application, sourceMax, cancel);
+
+            await using var select = source.CreateCommand();
+            select.CommandText = $"""
+                SELECT TimestampUtc, Level, Application, Category, Message, MessageTemplate, Exception, PropertiesJson, CorrelationId, MachineName
+                FROM {LogSchema.TableName}
+                WHERE Application = $application AND TimestampUtc >= $from
+                ORDER BY TimestampUtc;
+                """;
+            select.Parameters.AddWithValue("$application", application);
+            // A source row lands in SQL Server rounded to the millisecond, so only rows at least half a
+            // millisecond past the watermark round to something newer than it.
+            select.Parameters.AddWithValue("$from", watermark is { } w ? w.AddTicks(5000).ToString("o") : "");
+
+            await using var reader = await select.ExecuteReaderAsync(cancel);
+            await using var insert = CreateSqlServerInsertCommand(dest);
+            SqlTransaction? transaction = null;
+            var inBatch = 0;
+            try
+            {
+                while (await reader.ReadAsync(cancel))
+                {
+                    var timestampUtc = ToSqlServerMilliseconds(reader.GetString(0));
+                    if (watermark is { } mark && timestampUtc <= mark) continue;
+
+                    if (transaction is null)
+                    {
+                        transaction = (SqlTransaction)await dest.BeginTransactionAsync(cancel);
+                        insert.Transaction = transaction;
+                    }
+
+                    insert.Parameters["@timestampUtc"].Value = timestampUtc;
+                    insert.Parameters["@level"].Value = Convert.ToByte(reader.GetValue(1));
+                    insert.Parameters["@application"].Value = reader.GetString(2);
+                    insert.Parameters["@category"].Value = NullableString(reader, 3);
+                    insert.Parameters["@message"].Value = reader.GetString(4);
+                    insert.Parameters["@messageTemplate"].Value = NullableString(reader, 5);
+                    insert.Parameters["@exception"].Value = NullableString(reader, 6);
+                    insert.Parameters["@propertiesJson"].Value = NullableString(reader, 7);
+                    insert.Parameters["@correlationId"].Value = NullableString(reader, 8);
+                    insert.Parameters["@machineName"].Value = NullableString(reader, 9);
+                    await insert.ExecuteNonQueryAsync(cancel);
+                    copied++;
+
+                    if (++inBatch < batchSize) continue;
+                    await transaction.CommitAsync(cancel);
+                    await transaction.DisposeAsync();
+                    transaction = null;
+                    inBatch = 0;
+                }
+                if (transaction is not null) await transaction.CommitAsync(cancel);
+            }
+            finally
+            {
+                if (transaction is not null) await transaction.DisposeAsync();
+            }
+        }
+
+        return copied;
+    }
+
+    /// <summary>The newest destination row for <paramref name="application"/> no newer than its newest
+    /// source row, or null when there is none.</summary>
+    private static async Task<DateTime?> ReadSqlServerWatermarkAsync(
+        SqlConnection dest, string application, DateTime sourceMax, CancellationToken cancel)
+    {
+        await using var command = dest.CreateCommand();
+        command.CommandText = $"SELECT MAX(TimestampUtc) FROM dbo.{LogSchema.TableName} WHERE Application = @application AND TimestampUtc <= @sourceMax;";
+        command.Parameters.Add("@application", System.Data.SqlDbType.NVarChar, 200).Value = application;
+        var sourceMaxParam = command.Parameters.Add("@sourceMax", System.Data.SqlDbType.DateTime2);
+        sourceMaxParam.Scale = 3;
+        sourceMaxParam.Value = sourceMax;
+        var result = await command.ExecuteScalarAsync(cancel);
+        return result is DateTime dt ? DateTime.SpecifyKind(dt, DateTimeKind.Utc) : null;
+    }
+
+    private static SqlCommand CreateSqlServerInsertCommand(SqlConnection dest)
+    {
+        var command = dest.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO dbo.{LogSchema.TableName}
+                (TimestampUtc, Level, Application, Category, Message, MessageTemplate, Exception, PropertiesJson, CorrelationId, MachineName)
+            VALUES
+                (@timestampUtc, @level, @application, @category, @message, @messageTemplate, @exception, @propertiesJson, @correlationId, @machineName);
+            """;
+        command.Parameters.Add("@timestampUtc", System.Data.SqlDbType.DateTime2).Scale = 3;
+        command.Parameters.Add("@level", System.Data.SqlDbType.TinyInt);
+        command.Parameters.Add("@application", System.Data.SqlDbType.NVarChar, 200);
+        command.Parameters.Add("@category", System.Data.SqlDbType.NVarChar, 400);
+        command.Parameters.Add("@message", System.Data.SqlDbType.NVarChar, -1);
+        command.Parameters.Add("@messageTemplate", System.Data.SqlDbType.NVarChar, -1);
+        command.Parameters.Add("@exception", System.Data.SqlDbType.NVarChar, -1);
+        command.Parameters.Add("@propertiesJson", System.Data.SqlDbType.NVarChar, -1);
+        command.Parameters.Add("@correlationId", System.Data.SqlDbType.NVarChar, 100);
+        command.Parameters.Add("@machineName", System.Data.SqlDbType.NVarChar, 200);
+        return command;
+    }
+
+    /// <summary>A SQLite ISO-8601 <c>TimestampUtc</c> rounded to the millisecond, the precision of
+    /// the SQL Server store's <c>datetime2(3)</c> column, so the watermark compares like with like.</summary>
+    private static DateTime ToSqlServerMilliseconds(string timestampUtc)
+    {
+        var parsed = DateTime.Parse(timestampUtc, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
+        return new DateTime((parsed.Ticks + 5000) / 10000 * 10000, DateTimeKind.Utc);
+    }
+
+    private static object NullableString(System.Data.Common.DbDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? DBNull.Value : reader.GetString(ordinal);
 
     private static async Task<bool> SqlServerTableExistsAsync(SqlConnection source, CancellationToken cancel)
     {

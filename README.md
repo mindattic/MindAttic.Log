@@ -42,6 +42,12 @@ services.AddMindAtticLog(o =>
 
 With no connection string the app stays on SQLite. `o.Store` names a registered store explicitly (`"sqlite"`, `"sqlserver"`) when the configuration alone shouldn't decide.
 
+To bring an app's existing SQLite history along when it moves to SQL Server, run the migrator once with the same two values; it only reads the `.db` file and, re-run, copies only rows it hasn't copied yet:
+
+```csharp
+await MindAtticLogMigrator.MigrateSqliteToSqlServerAsync(dbPath, connectionString);
+```
+
 Application code is unchanged: inject `ILogger<T>` and call it as usual.
 
 ## Building
