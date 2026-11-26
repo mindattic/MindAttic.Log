@@ -29,6 +29,19 @@ services.AddMindAtticLog(o =>
 });
 ```
 
+An app that should log to SQL Server instead sets a connection string from its configuration; every such app shares the one `MindAttic.Log` database (created on first write if it's missing) and is told apart by the `Application` column:
+
+```csharp
+services.AddMindAtticLog(o =>
+{
+    o.Application = "MindAttic.Launcher";
+    o.ConnectionString = configuration.GetConnectionString("MindAttic.Log");
+    // e.g. Server=localhost;Database=MindAttic.Log;Integrated Security=true;TrustServerCertificate=true
+});
+```
+
+With no connection string the app stays on SQLite. `o.Store` names a registered store explicitly (`"sqlite"`, `"sqlserver"`) when the configuration alone shouldn't decide.
+
 Application code is unchanged: inject `ILogger<T>` and call it as usual.
 
 ## Building

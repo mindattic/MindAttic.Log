@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using MindAttic.Log.Schema;
 using Serilog.Core;
@@ -111,14 +110,14 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
                 foreach (var evt in batch)
                 {
                     timestampUtc.Value = evt.Timestamp.UtcDateTime.ToString("o");
-                    level.Value = (int)MapLevel(evt.Level);
+                    level.Value = (int)LogEventFields.MapLevel(evt.Level);
                     applicationParam.Value = application;
-                    category.Value = (object?)SourceContextOf(evt) ?? DBNull.Value;
+                    category.Value = (object?)LogEventFields.SourceContextOf(evt) ?? DBNull.Value;
                     message.Value = evt.RenderMessage();
                     messageTemplate.Value = evt.MessageTemplate.Text;
                     exception.Value = (object?)evt.Exception?.ToString() ?? DBNull.Value;
-                    propertiesJson.Value = (object?)PropertiesOf(evt) ?? DBNull.Value;
-                    correlationId.Value = (object?)CorrelationIdOf(evt) ?? DBNull.Value;
+                    propertiesJson.Value = (object?)LogEventFields.PropertiesOf(evt) ?? DBNull.Value;
+                    correlationId.Value = (object?)LogEventFields.CorrelationIdOf(evt) ?? DBNull.Value;
                     machineNameParam.Value = machineName;
                     command.ExecuteNonQuery();
                 }
@@ -133,31 +132,6 @@ public sealed class MindAtticSqliteSink : ILogEventSink, IDisposable
                 // host process. Dropping a batch on any sink failure is the right tradeoff.
             }
         }
-    }
-
-    private static Models.LogSeverity MapLevel(LogEventLevel level) => level switch
-    {
-        LogEventLevel.Verbose => Models.LogSeverity.Verbose,
-        LogEventLevel.Debug => Models.LogSeverity.Debug,
-        LogEventLevel.Information => Models.LogSeverity.Information,
-        LogEventLevel.Warning => Models.LogSeverity.Warning,
-        LogEventLevel.Error => Models.LogSeverity.Error,
-        LogEventLevel.Fatal => Models.LogSeverity.Fatal,
-        _ => Models.LogSeverity.Information,
-    };
-
-    private static string? SourceContextOf(LogEvent evt) =>
-        evt.Properties.TryGetValue("SourceContext", out var value) && value is ScalarValue { Value: string s } ? s : null;
-
-    private static string? CorrelationIdOf(LogEvent evt) =>
-        evt.Properties.TryGetValue("CorrelationId", out var value) && value is ScalarValue { Value: string s } ? s : null;
-
-    private static string? PropertiesOf(LogEvent evt)
-    {
-        var extra = evt.Properties
-            .Where(p => p.Key is not ("SourceContext" or "CorrelationId"))
-            .ToDictionary(p => p.Key, p => p.Value.ToString());
-        return extra.Count == 0 ? null : JsonSerializer.Serialize(extra);
     }
 
     /// <summary>

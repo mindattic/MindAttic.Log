@@ -6,12 +6,12 @@ namespace MindAttic.Log.Extensions;
 
 public static class LoggerConfigurationExtensions
 {
-    /// <summary>Routes the app onto the log store its <see cref="MindAtticLogOptions.Store"/> names in
-    /// <see cref="LogStoreRegistry"/> — by default its standalone SQLite <c>MindAttic.Log.db</c>
-    /// (see docs/BIBLE.md §4).</summary>
+    /// <summary>Routes the app onto the log store <see cref="MindAtticLogOptions.EffectiveStore"/> names in
+    /// <see cref="LogStoreRegistry"/>: SQL Server when a connection string is configured, otherwise
+    /// its standalone SQLite <c>MindAttic.Log.db</c> (see docs/BIBLE.md §4).</summary>
     public static LoggerConfiguration WriteToMindAtticLog(this LoggerConfiguration loggerConfiguration, MindAtticLogOptions options)
     {
-        var store = LogStoreRegistry.Resolve(options.Store);
+        var store = LogStoreRegistry.Resolve(options.EffectiveStore);
         return loggerConfiguration.WriteTo.Sink(
             store.CreateSink(options),
             restrictedToMinimumLevel: MapLevel(options.MinimumLevel));

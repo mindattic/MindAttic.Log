@@ -4,14 +4,18 @@ namespace MindAttic.Log.Stores;
 
 /// <summary>
 /// The provider registry behind <see cref="MindAtticLogOptions.Store"/>: every <see cref="ILogStore"/>
-/// an app can choose, keyed by its case-insensitive <see cref="ILogStore.Name"/>. SQLite is
-/// registered from the start and is the default; further stores (SQL Server, ...) add themselves with
+/// an app can choose, keyed by its case-insensitive <see cref="ILogStore.Name"/>. SQLite (the
+/// default) and SQL Server are registered from the start; further stores add themselves with
 /// <see cref="Register"/> rather than growing a hard-coded switch.
 /// </summary>
 public static class LogStoreRegistry
 {
     private static readonly ConcurrentDictionary<string, ILogStore> stores =
-        new(StringComparer.OrdinalIgnoreCase) { [SqliteLogStore.StoreName] = new SqliteLogStore() };
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            [SqliteLogStore.StoreName] = new SqliteLogStore(),
+            [SqlServerLogStore.StoreName] = new SqlServerLogStore(),
+        };
 
     /// <summary>The store used when an app names none.</summary>
     public static string DefaultStore => SqliteLogStore.StoreName;
