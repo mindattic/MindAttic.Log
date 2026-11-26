@@ -78,12 +78,15 @@ public sealed class LogQueryService
         if (filter.UntilUtc is { } until) { clauses.Add("TimestampUtc <= $until"); parameters.Add(("$until", until.ToString("o"))); }
         if (filter.MinLevel is { } minLevel) { clauses.Add("Level >= $minLevel"); parameters.Add(("$minLevel", minLevel)); }
         if (!string.IsNullOrWhiteSpace(filter.Application)) { clauses.Add("Application = $application"); parameters.Add(("$application", filter.Application)); }
-        if (!string.IsNullOrWhiteSpace(filter.Category)) { clauses.Add("Category LIKE $category"); parameters.Add(("$category", $"%{filter.Category}%")); }
-        if (!string.IsNullOrWhiteSpace(filter.SearchText)) { clauses.Add("Message LIKE $searchText"); parameters.Add(("$searchText", $"%{filter.SearchText}%")); }
+        if (!string.IsNullOrWhiteSpace(filter.Category)) { clauses.Add("Category LIKE $category ESCAPE '\\'"); parameters.Add(("$category", $"%{EscapeLike(filter.Category)}%")); }
+        if (!string.IsNullOrWhiteSpace(filter.SearchText)) { clauses.Add("Message LIKE $searchText ESCAPE '\\'"); parameters.Add(("$searchText", $"%{EscapeLike(filter.SearchText)}%")); }
 
         var where = clauses.Count == 0 ? "" : "WHERE " + string.Join(" AND ", clauses);
         return (where, parameters);
     }
+
+    /// <summary>The user's text is a literal substring, so LIKE's own wildcards (% and _) and the escape character are escaped (paired with ESCAPE backslash).</summary>
+    private static string EscapeLike(string text) => text.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private static LogEntry ReadEntry(System.Data.Common.DbDataReader reader) => new()
     {
