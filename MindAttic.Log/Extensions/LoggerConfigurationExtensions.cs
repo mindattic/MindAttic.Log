@@ -1,4 +1,4 @@
-using MindAttic.Log.Sinks;
+using MindAttic.Log.Stores;
 using Serilog;
 using Serilog.Events;
 
@@ -6,15 +6,14 @@ namespace MindAttic.Log.Extensions;
 
 public static class LoggerConfigurationExtensions
 {
-    /// <summary>Routes every app onto its standalone <see cref="MindAtticSqliteSink"/> — the one
-    /// remaining tier (see docs/BIBLE.md §4).</summary>
+    /// <summary>Routes the app onto the log store its <see cref="MindAtticLogOptions.Store"/> names in
+    /// <see cref="LogStoreRegistry"/> — by default its standalone SQLite <c>MindAttic.Log.db</c>
+    /// (see docs/BIBLE.md §4).</summary>
     public static LoggerConfiguration WriteToMindAtticLog(this LoggerConfiguration loggerConfiguration, MindAtticLogOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.DbPath))
-            throw new InvalidOperationException($"{nameof(options.DbPath)} is required.");
-
+        var store = LogStoreRegistry.Resolve(options.Store);
         return loggerConfiguration.WriteTo.Sink(
-            new MindAtticSqliteSink(options.DbPath, options.Application, retainedDays: options.RetainedDays),
+            store.CreateSink(options),
             restrictedToMinimumLevel: MapLevel(options.MinimumLevel));
     }
 

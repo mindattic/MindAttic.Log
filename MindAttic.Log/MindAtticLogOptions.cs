@@ -9,6 +9,10 @@ public sealed class MindAtticLogOptions
 
     public LogSeverity MinimumLevel { get; set; } = LogSeverity.Information;
 
+    /// <summary>Which registered log store this app writes to (see <c>Stores.LogStoreRegistry</c>).
+    /// Defaults to <c>"sqlite"</c>, the standalone <c>MindAttic.Log.db</c> at <see cref="DbPath"/>.</summary>
+    public string Store { get; set; } = Stores.SqliteLogStore.StoreName;
+
     /// <summary>
     /// Required. Full path to this app's standalone <c>MindAttic.Log.db</c>. The host computes this
     /// via <c>MindAttic.Vault.Paths.VaultPaths.LoggingDbPath(Application)</c> and passes the resolved
