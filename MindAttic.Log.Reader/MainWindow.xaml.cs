@@ -62,7 +62,7 @@ public partial class MainWindow : Window
             switch (action)
             {
                 case "ready":
-                    await PostAsync("onApps", queryService.DiscoverApps());
+                    await PostAsync("onApps", await Task.Run(queryService.DiscoverApps));
                     await PostAsync("onSettings", settingsStore.Load());
                     break;
 
@@ -98,6 +98,7 @@ public partial class MainWindow : Window
         var sourceNode = msg["source"] ?? throw new InvalidOperationException("Missing 'source'.");
         var source = new LogSource
         {
+            Store = sourceNode["store"]?.GetValue<string>() ?? Stores.SqliteLogStore.StoreName,
             AppId = sourceNode["appId"]!.GetValue<string>(),
             Path = sourceNode["path"]!.GetValue<string>(),
         };

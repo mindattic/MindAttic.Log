@@ -24,8 +24,8 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.20" />
-    <!-- No Microsoft.Data.SqlClient: the SQL Server tier is retired, the Reader only ever opens
-         standalone MindAttic.Log.db SQLite files now (see docs/BIBLE.md §1/§4). -->
+    <!-- Microsoft.Data.SqlClient comes through the MindAttic.Log project reference; the Reader
+         uses it for the SQL Server store (Services/SqlServerLogStoreReader.cs). -->
     <PackageReference Include="MindAttic.Vault" Version="7.0.0" />
   </ItemGroup>
 

@@ -5,20 +5,20 @@
 
   const LEVEL_NAMES = ["Verbose", "Debug", "Information", "Warning", "Error", "Fatal"];
 
-  let apps = []; // [{ appId, path }], from onApps — one entry per Vault Logging\<appId>\MindAttic.Log.db
-  let currentSource = null; // { appId, path }
+  let apps = []; // [{ store, appId, path, label, key }], from onApps — one entry per app per log store
+  let currentSource = null; // { store, appId, path, label, key }
 
   function post(action, payload) {
     window.chrome.webview.postMessage(Object.assign({ action }, payload || {}));
   }
 
-  function selectApp(appId, { query = true } = {}) {
-    const app = apps.find((a) => a.appId === appId);
+  function selectApp(key, { query = true } = {}) {
+    const app = apps.find((a) => a.key === key);
     if (!app) return;
     currentSource = app;
-    document.getElementById("appSelect").value = appId;
-    document.getElementById("sourceLabel").textContent = app.path;
-    post("selectApp", { appId });
+    document.getElementById("appSelect").value = key;
+    document.getElementById("sourceLabel").textContent = app.label ?? app.path;
+    post("selectApp", { appId: key });
     if (query) runQuery();
   }
 
@@ -28,14 +28,14 @@
     if (apps.length === 0) {
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "(no apps found under %APPDATA%\\MindAttic\\Logging)";
+      option.textContent = "(no apps found under %APPDATA%\\MindAttic\\Logging or the configured SQL Server databases)";
       select.appendChild(option);
       return;
     }
     for (const app of apps) {
       const option = document.createElement("option");
-      option.value = app.appId;
-      option.textContent = app.appId;
+      option.value = app.key;
+      option.textContent = app.key;
       select.appendChild(option);
     }
   }
@@ -103,12 +103,12 @@
       renderAppOptions();
     },
     onSettings(settings) {
-      if (settings.lastAppId && apps.some((a) => a.appId === settings.lastAppId)) selectApp(settings.lastAppId, { query: false });
+      if (settings.lastAppId && apps.some((a) => a.key === settings.lastAppId)) selectApp(settings.lastAppId, { query: false });
       else if (apps.length > 0) {
         // The dropdown already shows apps[0], and re-picking the shown option fires no "change",
         // so without this a lone app (or a first run) could never be selected or queried.
         currentSource = apps[0];
-        document.getElementById("sourceLabel").textContent = apps[0].path;
+        document.getElementById("sourceLabel").textContent = apps[0].label ?? apps[0].path;
       }
     },
     onResults(entries) { renderRows(entries); },

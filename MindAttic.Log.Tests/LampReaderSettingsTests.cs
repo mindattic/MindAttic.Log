@@ -61,6 +61,20 @@ public class LampReaderSettingsTests
     }
 
     [Test]
+    public void Setting_SqlServerDatabases_RoundTripsAsAMultilineListTheReaderDiscoversFrom()
+    {
+        var store = NewStore();
+        var s = store.LoadOrSeed();
+        Assert.That(s.SqlServerDatabases, Is.Null, "no SQL Server databases until configured");
+        s.SqlServerDatabases = "Server=localhost;Integrated Security=true\r\nServer=other;Database=Logs";
+        store.Save(s);
+        Assert.That(NewStore().Load().SqlServerDatabases, Is.EqualTo(s.SqlServerDatabases));
+
+        var field = SettingsManifestBuilder.Build<ReaderSettings>().Find("MindAttic:Settings:MindAttic.Log.Reader:sqlServerDatabases");
+        Assert.That(field!.Kind, Is.EqualTo(SettingKind.Multiline));
+    }
+
+    [Test]
     public void EverySettingHasItsOwnTest()
     {
         var tested = GetType().GetMethods().Select(m => m.Name).Where(n => n.StartsWith("Setting_")).ToList();

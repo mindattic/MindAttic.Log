@@ -42,7 +42,7 @@ public partial class App : Application
                 .AddMindAtticVault(ctx.Configuration)
                 .AddVaultAppSettings<ReaderSettings>(ReaderSettings.AppId)
                 .AddSingleton<ReaderSettingsStore>()
-                .AddSingleton<LogQueryService>())
+                .AddSingleton(sp => new LogQueryService(sp.GetRequiredService<ReaderSettingsStore>())))
             .Build();
 
         Services = host.Services;

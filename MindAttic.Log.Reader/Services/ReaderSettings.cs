@@ -13,4 +13,11 @@ public sealed class ReaderSettings
     [Setting("App shown at start", Group = "General", Order = 1,
         Help = "The Reader opens this app's log when it starts (a folder name under the Logging bucket, e.g. Prose). It updates to the last app you viewed.")]
     public string? LastAppId { get; set; }
+
+    /// <summary>SQL Server connection strings, one per line, whose shared <c>MindAttic.Log</c>
+    /// databases the Reader lists apps from alongside the SQLite files (M.LOGS-T31).</summary>
+    [Setting("SQL Server log databases", Group = "General", Order = 2,
+        Help = "One connection string per line, e.g. Server=localhost;Integrated Security=true;TrustServerCertificate=true. The database defaults to MindAttic.Log. Every app logging there shows in the app list. Leave empty to read only the SQLite files.")]
+    [Multiline]
+    public string? SqlServerDatabases { get; set; }
 }
